@@ -7,6 +7,7 @@
  * who closes a tab deserves to know whether their edit has landed.
  */
 import { GAuth, loadGIS } from './gauth.js'
+import { installParentAuth } from './parent-auth.js'
 import { markReady } from './ready.js'
 import { rootId }    from './drive.js'
 
@@ -112,6 +113,12 @@ export function installGate({ title = 'System Design Hub', emoji = '🧭', onFlu
 
   // A token kept from earlier this session skips the click entirely.
   if (GAuth.restore()) enter()
+
+  // Framed by PG Hub Tech: it hands down its Google session, so the gate never
+  // asks for a second sign-in. The message lands after this point, hence the
+  // callback rather than another restore() here — and `enter()` is guarded by
+  // isSignedIn(), so a late arrival cannot double sign-in.
+  installParentAuth(() => { if (GAuth.restore()) enter() })
 
   window.addEventListener('gauth:expired', () => {
     if (!document.body.contains(gate)) {
