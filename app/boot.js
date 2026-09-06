@@ -9,7 +9,7 @@ import { installStore, flush } from './store.js'
 import { installMedia }        from './media.js'
 import { installGate }         from './gate.js'
 import { ready }               from './ready.js'
-import { readJsonById, findChild, rootId } from './drive.js'
+import { readRootJson } from './drive.js'
 
 const params = new URLSearchParams(location.search)
 const mod    = params.get('m') || '01-foundations'
@@ -20,8 +20,7 @@ installGate({ title: 'System Design Hub', emoji: '🧭', onFlush: flush })
 
 ready.then(async () => {
   try {
-    const id  = await findChild(await rootId(), 'hub.json')
-    const hub = id ? await readJsonById(id, {}) : {}
+    const hub = await readRootJson('hub.json', {})
     const m   = hub.modules?.[mod]
     if (!m) return
     document.title = `${m.title} — SysDsg Hub`

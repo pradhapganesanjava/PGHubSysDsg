@@ -60,20 +60,68 @@ export async function moduleFolderId(mod) {
   return id
 }
 
-/** Read a JSON file that lives directly in a module's folder. */
+/**
+ * Read a JSON file that lives directly in a module's folder.
+ *
+ * Ids are memoised in localStorage, so one that has gone stale — the file was
+ * re-created, moved, or the whole folder was rebuilt — would otherwise 404
+ * forever and render an empty hub with no explanation. A 404 therefore drops
+ * the cache and re-resolves once; only a genuine absence returns the fallback.
+ */
 export async function readModuleJson(mod, name, fallback = {}) {
-  try {
+  const attempt = async () => {
     const folder = await moduleFolderId(mod)
     const id = await findChild(folder, name)
-    if (!id) return fallback
-    return await readJsonById(id, fallback)
-  } catch { return fallback }
+    if (!id) return { missing: true }
+    return { data: await readJsonById(id) }
+  }
+  try {
+    const first = await attempt()
+    if (!first.missing) return first.data
+    return fallback
+  } catch (e) {
+    if (e?.status !== 404) return fallback
+    clearIdCache()
+    try {
+      const retry = await attempt()
+      return retry.missing ? fallback : retry.data
+    } catch { return fallback }
+  }
 }
 
-export async function readJsonById(fileId, fallback = {}) {
+/**
+ * Read a JSON file sitting directly in the hub's root folder, with the same
+ * stale-id self-heal as readModuleJson.
+ */
+export async function readRootJson(name, fallback = {}) {
+  const attempt = async () => {
+    const id = await findChild(await rootId(), name)
+    if (!id) return { missing: true }
+    return { data: await readJsonById(id) }
+  }
+  try {
+    const first = await attempt()
+    return first.missing ? fallback : first.data
+  } catch (e) {
+    if (e?.status !== 404) return fallback
+    clearIdCache()
+    try {
+      const retry = await attempt()
+      return retry.missing ? fallback : retry.data
+    } catch { return fallback }
+  }
+}
+
+/** Throws {status} on failure so callers can distinguish 404 from anything else. */
+export async function readJsonById(fileId, fallback) {
   const r = await GAuth.fetch(`${FILES}/${fileId}?alt=media&supportsAllDrives=true`)
-  if (!r.ok) return fallback
-  try { return await r.json() } catch { return fallback }
+  if (!r.ok) {
+    if (fallback !== undefined) return fallback
+    const err = new Error(`Drive read failed (${r.status})`)
+    err.status = r.status
+    throw err
+  }
+  try { return await r.json() } catch { return fallback ?? {} }
 }
 
 /** Fetch a Drive file's raw bytes. */

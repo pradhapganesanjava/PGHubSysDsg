@@ -11,7 +11,7 @@
  * time). The third is served out of whichever module's data file it names,
  * cached after the first hit so browsing a module's items is instant.
  */
-import { readJsonById, findChild, rootId, readModuleJson } from './drive.js'
+import { readRootJson, readModuleJson } from './drive.js'
 import { ready } from './ready.js'
 
 const nativeFetch = window.fetch.bind(window)
@@ -27,18 +27,13 @@ const json = (body, status = 200) =>
     status, headers: { 'Content-Type': 'application/json' },
   })
 
-async function rootFile(name, fallback) {
-  const id = await findChild(await rootId(), name)
-  return id ? readJsonById(id, fallback) : fallback
-}
-
 export async function hubManifest() {
-  return _hub ??= await rootFile('hub.json', { modules: {}, categories: [] })
+  return _hub ??= await readRootJson('hub.json', { modules: {}, categories: [] })
 }
 
 async function hubIndex() {
   if (_index) return _index
-  _index = await rootFile('hub-index.json', null)
+  _index = await readRootJson('hub-index.json', null)
   if (_index) return _index
   // No baked index (migration not re-run): assemble one from the module files.
   // Slower, but the page works rather than showing an empty tree.
