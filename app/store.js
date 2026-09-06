@@ -137,7 +137,9 @@ async function discoverNewDocs(known) {
     const docsId = await findChild(folder, 'docs')
     if (!docsId) return []
     const files = await listFolder(docsId)
-    const added = files.filter(f => DOC_EXT.test(f.name) && !known.has(f.name))
+    const added = files.filter(f =>
+      f.mimeType !== 'application/vnd.google-apps.folder' &&
+      DOC_EXT.test(f.name) && !known.has(f.name))
     return Promise.all(added.map(async f => {
       const type = typeOf(f.name)
       const base = f.name.replace(DOC_EXT, '')

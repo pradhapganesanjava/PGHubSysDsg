@@ -102,18 +102,34 @@ async function main() {
       } catch (e) { bad(`docs-index unreadable: ${e.message}`) }
     } else meh('docs-index    not uploaded')
 
-    // uploaded doc count matches the local folder
+    // Uploaded doc count matches the local folder. Compared at the top level
+    // only, and files against files: a docs/ tree can contain real
+    // subdirectories (05-backend/docs/transcripts/), which are mirrored as
+    // Drive folders, so counting them together would never agree.
+    const FOLDER = 'application/vnd.google-apps.folder'
     const docsFolder = await findChild(drive, ms.folderId, 'docs')
     if (docsFolder) {
       const remote = await listChildren(drive, docsFolder.id)
-      let localCount = 0
+      const remoteFiles = remote.filter(f => f.mimeType !== FOLDER)
+      const remoteDirs  = remote.filter(f => f.mimeType === FOLDER)
+      let localFiles = 0, localDirs = 0
       try {
-        const names = await readdir(join(REPO, m, 'docs'), { withFileTypes: true })
-        localCount = names.filter(e => e.isFile() && e.name !== '.DS_Store').length
+        const entries = await readdir(join(REPO, m, 'docs'), { withFileTypes: true })
+        localFiles = entries.filter(e =>
+          e.isFile() && e.name !== '.DS_Store' && e.name !== '.gitkeep').length
+        localDirs = entries.filter(e => e.isDirectory() && e.name !== 'assets').length
       } catch {}
-      remote.length === localCount
-        ? ok(`docs folder   ${remote.length} files`)
-        : bad(`docs folder   ${remote.length} in Drive, ${localCount} on disk`)
+      // 'assets' is uploaded to the shared pool, not into the module's docs/
+      const expectDirs = localDirs
+      remoteFiles.length === localFiles && remoteDirs.length === expectDirs
+        ? ok(`docs folder   ${remoteFiles.length} files` +
+             (expectDirs ? `, ${expectDirs} subfolder(s)` : ''))
+        : bad(`docs folder   ${remoteFiles.length} files / ${remoteDirs.length} dirs in Drive, ` +
+              `${localFiles} / ${expectDirs} on disk`)
+
+      // nothing should carry a path separator in its Drive name
+      const slashed = remote.filter(f => f.name.includes('/'))
+      if (slashed.length) bad(`docs folder   ${slashed.length} name(s) contain a slash`)
     }
 
     // every assets/ reference a document makes is resolvable

@@ -72,7 +72,9 @@ async function walk(dir, base = dir) {
   let entries
   try { entries = await readdir(dir, { withFileTypes: true }) } catch { return out }
   for (const e of entries) {
-    if (e.name === '.DS_Store' || e.name.startsWith('._')) continue
+    // .gitkeep only ever existed to keep an empty directory in git; Drive has
+    // no such need, and uploading it just litters the folder.
+    if (e.name === '.DS_Store' || e.name === '.gitkeep' || e.name.startsWith('._')) continue
     const p = join(dir, e.name)
     if (e.isDirectory()) out.push(...await walk(p, base))
     else if (e.isFile()) out.push({ abs: p, rel: relative(base, p).split('\\').join('/') })
@@ -87,6 +89,30 @@ async function loadState() {
 async function saveState(s) {
   if (!DRY) await writeFile(STATE, JSON.stringify(s, null, 2))
 }
+
+/**
+ * Resolve a nested relative path to its Drive parent folder, creating folders
+ * as needed and caching them.
+ *
+ * Some docs/ trees have real subdirectories (05-backend/docs/transcripts/).
+ * Uploading those with their relative path as the *filename* would produce
+ * Drive files literally called "transcripts/1. Roadmap.md" — Drive allows a
+ * slash in a name, so it silently looks fine and is wrong: the structure is
+ * lost and anything listing the folder sees a document with a slash in it.
+ */
+const folderMemo = new Map()
+async function parentFor(drive, rootFolderId, rel) {
+  const parts = rel.split('/')
+  parts.pop()                                   // drop the filename
+  let id = rootFolderId
+  for (const part of parts) {
+    const key = `${id}/${part}`
+    if (!folderMemo.has(key)) folderMemo.set(key, await ensureFolder(drive, id, part))
+    id = folderMemo.get(key)
+  }
+  return id
+}
+const baseName = rel => rel.split('/').pop()
 
 const bytes = n =>
   n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : n > 1e3 ? `${(n / 1e3).toFixed(0)} KB` : `${n} B`
@@ -172,7 +198,8 @@ async function main() {
         totals.files++; totals.bytes += size
         if (DRY) { n++; continue }
         const md5 = await md5File(f.abs)
-        const r = await upsertFile(drive, docsId, f.rel, f.abs, mimeOf(f.rel), md5)
+        const parent = await parentFor(drive, docsId, f.rel)
+        const r = await upsertFile(drive, parent, baseName(f.rel), f.abs, mimeOf(f.rel), md5)
         ms.docs[f.rel] = r.id
         if (r.skipped) totals.skipped++
         if (++n % 25 === 0) { process.stdout.write(`     docs   ${n}/${plain.length}\r`); await saveState(state) }
@@ -208,7 +235,8 @@ async function main() {
         totals.files++; totals.bytes += size
         if (DRY) continue
         const md5 = await md5File(f.abs)
-        const r = await upsertFile(drive, imgId, f.rel, f.abs, mimeOf(f.rel), md5)
+        const parent = await parentFor(drive, imgId, f.rel)
+        const r = await upsertFile(drive, parent, baseName(f.rel), f.abs, mimeOf(f.rel), md5)
         ms.images[f.rel] = r.id
       }
       console.log(`     images ${imgs.length} file(s)`)
