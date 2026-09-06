@@ -78,15 +78,30 @@ export function installGate({ title = 'System Design Hub', emoji = '🧭', onFlu
     err.hidden = false
     err.textContent = e.message ?? String(e)
     btn.disabled = false
-    btn.textContent = 'Try again'
+    // Signed in, but this account cannot see the content — almost always the
+    // wrong Google account. Drop the token so the next click offers the
+    // account chooser again; otherwise "Try again" just fails identically,
+    // with no way to switch.
+    if (e?.code === 'no-root' || e?.message?.includes("doesn't have access")) {
+      GAuth.signOut()
+      forceChooser = true
+      btn.textContent = 'Sign in with a different account'
+    } else {
+      btn.textContent = 'Try again'
+    }
   }
+
+  // Set when a sign-in succeeded but the account could not reach the content,
+  // so the next attempt asks which account rather than silently reusing it.
+  let forceChooser = false
 
   async function enter() {
     btn.disabled = true
     btn.textContent = 'Signing in…'
     err.hidden = true
     try {
-      if (!GAuth.isSignedIn()) await GAuth.signIn()
+      if (!GAuth.isSignedIn()) await GAuth.signIn(forceChooser ? 'select_account' : '')
+      forceChooser = false
       await rootId()                      // fail loudly now, not on first render
       gate.remove()
       markReady()

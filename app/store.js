@@ -185,7 +185,6 @@ async function docsIndex() {
 }
 
 export function assetMap() { return Store._assets ?? {} }
-export function docNames() { return new Set((Store._docs ?? []).map(d => d.name)) }
 
 async function handleDocTags(payload) {
   const data  = await readModuleJson(Store.mod, 'docs.json', {})

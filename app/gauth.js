@@ -58,18 +58,25 @@ export const GAuth = {
   getUser()  { return this._user },
   isSignedIn() { return !!this._token },
 
-  signIn() {
+  /**
+   * @param prompt  '' lets Google reuse the current session silently, which is
+   *                what you want almost always. Pass 'select_account' to force
+   *                the chooser — needed after signing in with an account that
+   *                cannot see the content, since silent reuse would just pick
+   *                the same one again.
+   */
+  signIn(prompt = '') {
     // Fast path: GIS is already loaded (preloaded at gate install), so the
     // token client is built and the popup opened synchronously, still inside
     // the click's gesture. Only a cold start pays the await, and then the
     // user's second click succeeds.
     if (typeof google === 'undefined' || !google.accounts?.oauth2) {
-      return loadGIS().then(() => this._requestToken())
+      return loadGIS().then(() => this._requestToken(prompt))
     }
-    return this._requestToken()
+    return this._requestToken(prompt)
   },
 
-  _requestToken() {
+  _requestToken(prompt) {
     return new Promise((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
         client_id: Config.clientId,
@@ -103,7 +110,7 @@ export const GAuth = {
           resolve(this._user)
         },
       })
-      client.requestAccessToken({ prompt: '' })
+      client.requestAccessToken({ prompt })
     })
   },
 

@@ -45,11 +45,15 @@ export async function findChild(parentId, name) {
 export async function rootId() {
   const id = await findChild('root', Config.rootFolderName)
   if (!id) {
-    throw new Error(
+    const e = new Error(
       `No Drive folder named "${Config.rootFolderName}" on this account. ` +
       `Either you signed in with the wrong Google account, or the content has ` +
       `not been migrated yet (see tools/migrate.mjs).`
     )
+    // Tagged so the sign-in gate can offer to switch accounts, which is the
+    // likely fix and is otherwise unreachable once a token is held.
+    e.code = 'no-root'
+    throw e
   }
   return id
 }
