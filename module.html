@@ -2937,7 +2937,7 @@ function renderDoc(name) {
     detail.innerHTML = tagBar +
       `<div class="pdf-view">` +
         `<div class="pdf-bar"><span class="pdf-name">${escapeHtml(doc.title || doc.name)}</span>` +
-        `<a href="${doc.url}" target="_blank" rel="noopener">Open in new tab ↗</a></div>` +
+        `<a href="${doc.url}">Open full page →</a></div>` +
         `<iframe class="pdf-frame" src="${doc.url}" title="${escapeHtml(doc.name)}"></iframe>` +
       `</div>`;
   } else {

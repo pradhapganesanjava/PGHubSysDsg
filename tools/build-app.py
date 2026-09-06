@@ -110,6 +110,14 @@ def build(base_dir, out_path):
         (re.compile(r'    alert\("Could not save the tag — is the local server running\?\\n" \+ e\);'),
          '    alert("Could not save the tag to Google Drive.\\n" + e);'),
 
+        # The document link opened a new tab, and its href was the raw
+        # "drive:<id>" reference — a scheme no browser can follow, so it had
+        # never worked. media.js now resolves it like any other Drive
+        # reference, and it opens in place.
+        (re.compile(r'        `<a href="\\$\\{doc\\.url\\}" target="_blank" rel="noopener">'
+                    r'Open in new tab ↗</a></div>` \\+'),
+         '        `<a href="${doc.url}">Open full page →</a></div>` +'),
+
         # The Docs tab latched `docsLoaded` before its request, so a single
         # failed load left it permanently claiming the folder was empty. With
         # the data coming over the network now rather than off localhost, a

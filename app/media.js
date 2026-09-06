@@ -50,6 +50,16 @@ const ASSET_REF = /(["'(])(?:\.\/)?(assets\/[A-Za-z0-9._\-/]+)(["')])/g
 async function htmlDocUrl(id, blob) {
   const key = 'html:' + id
   if (blobs.has(key)) return blobs.get(key)
+  // A document is referenced twice — the iframe that displays it and the link
+  // that opens it full page — and both resolve at render time. Without this
+  // they race and download it twice.
+  if (inFlight.has(key)) return inFlight.get(key)
+  const p = buildHtmlDoc(id, blob, key).finally(() => inFlight.delete(key))
+  inFlight.set(key, p)
+  return p
+}
+
+async function buildHtmlDoc(id, blob, key) {
 
   // The caller already downloaded the document to sniff its type; reuse it
   // rather than fetching the same (sometimes large) file a second time.
@@ -92,9 +102,11 @@ function showFrame(el, url) {
 }
 
 async function resolveElement(el) {
-  const src = el.getAttribute('src') || ''
-  if (!src.startsWith('drive:')) return
-  const id = src.slice('drive:'.length)
+  // A link carries the reference in href; everything else in src.
+  const attr = el.tagName === 'A' ? 'href' : 'src'
+  const ref = el.getAttribute(attr) || ''
+  if (!ref.startsWith('drive:')) return
+  const id = ref.slice('drive:'.length)
   if (!id) return
   // The observer sees both the added node and the src attribute, so the same
   // element can arrive twice; without this the document is downloaded twice.
@@ -102,20 +114,24 @@ async function resolveElement(el) {
   el.dataset.driveResolving = id
   el.dataset.driveId = id
   try {
-    if (el.tagName !== 'IFRAME') {
+    if (el.tagName === 'IMG') {
       el.setAttribute('src', await driveBlobUrl(id))
       return
     }
     // An HTML document needs its relative assets rewritten before it can load
     // from a blob: URL; anything else (PDF, PNG) is handed over as-is.
+    const isFrame = el.tagName === 'IFRAME'
     const cached = blobs.get('html:' + id) ?? blobs.get(id)
-    if (cached) { showFrame(el, cached); return }
+    if (cached) {
+      if (isFrame) showFrame(el, cached); else el.setAttribute('href', cached)
+      return
+    }
 
     // Downloading a document and its assets takes a beat, and an iframe whose
     // src it cannot load renders as a blank white box — indistinguishable from
     // a broken page. srcdoc takes precedence over src, so a placeholder can be
     // shown in place without touching the surrounding layout.
-    el.srcdoc = LOADING_HTML
+    if (isFrame) el.srcdoc = LOADING_HTML
 
     const blob = await readBlobById(id)
     let url
@@ -126,7 +142,7 @@ async function resolveElement(el) {
       blobs.set(id, url)
       blobToDrive.set(url, `drive:${id}`)
     }
-    showFrame(el, url)
+    if (isFrame) showFrame(el, url); else el.setAttribute('href', url)
   } catch (e) {
     delete el.dataset.driveResolving          // let a later attempt retry
     // A failed <img> shows its alt text, but a failed <iframe> just sits there
@@ -135,6 +151,9 @@ async function resolveElement(el) {
     console.warn(`[sysdsg] could not load drive:${id} —`, e)
     if (el.tagName === 'IMG') {
       el.alt = `[unavailable: ${e.message}]`
+    } else if (el.tagName === 'A') {
+      el.removeAttribute('href')
+      el.title = `Unavailable — ${e.message}`
     } else {
       el.removeAttribute('srcdoc')
       const note = document.createElement('div')
@@ -147,10 +166,12 @@ async function resolveElement(el) {
   }
 }
 
+const DRIVE_REFS = 'img[src^="drive:"], iframe[src^="drive:"], a[href^="drive:"]'
+
 function scan(root) {
   if (!root || root.nodeType !== 1) return
-  if (root.matches?.('img[src^="drive:"], iframe[src^="drive:"]')) resolveElement(root)
-  root.querySelectorAll?.('img[src^="drive:"], iframe[src^="drive:"]').forEach(resolveElement)
+  if (root.matches?.(DRIVE_REFS)) resolveElement(root)
+  root.querySelectorAll?.(DRIVE_REFS).forEach(resolveElement)
 }
 
 /**
@@ -189,7 +210,7 @@ export function installMedia() {
     }
   }).observe(document.body, {
     childList: true, subtree: true,
-    attributes: true, attributeFilter: ['src'],
+    attributes: true, attributeFilter: ['src', 'href'],
   })
   window.addEventListener('pagehide', () => {
     for (const u of blobs.values()) { try { URL.revokeObjectURL(u) } catch {} }

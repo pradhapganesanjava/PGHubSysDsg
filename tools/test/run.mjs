@@ -6,7 +6,7 @@
  * modules are copied to a temp directory where drive.js is swapped for an
  * in-memory stub; nothing in app/ is modified or written for testability.
  */
-import { mkdtemp, cp, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, cp, writeFile, rm, readFile } from 'node:fs/promises'
 import { tmpdir }                     from 'node:os'
 import { join }                       from 'node:path'
 import { pathToFileURL }              from 'node:url'
@@ -312,6 +312,19 @@ await test('a blob: URL is stored back as its drive: reference', async () => {
     return media.restoreDriveUrls(`<p><img src="${blobUrl}"></p>`)
   })()
   assert.equal(restored, '<p><img src="drive:IMG1"></p>')
+})
+
+await test('a drive: link is recognised the same way a drive: image is', async () => {
+  // The document viewer renders <a href="drive:ID">, which no browser can
+  // follow. media.js only ever looked at src, so that link was dead; it now
+  // matches on href too.
+  const media = await import(u('media.js'))
+  const sel = 'img[src^="drive:"], iframe[src^="drive:"], a[href^="drive:"]'
+  const src = await readFile(join(dir, 'media.js'), 'utf8')
+  assert.ok(src.includes(sel), 'the observer selector must cover anchors')
+  assert.ok(/attributeFilter:\s*\['src', 'href'\]/.test(src),
+    'the observer must watch href changes, not only src')
+  assert.equal(typeof media.restoreDriveUrls, 'function')
 })
 
 await test('strings without blob: URLs are returned untouched', async () => {
