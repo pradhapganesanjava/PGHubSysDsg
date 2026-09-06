@@ -71,12 +71,12 @@ identity from `hub.json` at runtime.
 
 | Local checkout | GitHub repo | Visibility | Holds |
 |---|---|---|---|
-| `~/SysDsgHubPublic` | `pradhapganesanjava/PGSysdsgHub` | public | this code — the published site |
+| `~/SysDsgHubPublic` | `pradhapganesanjava/PGHubSysDsg` | public | this code — the published site |
 | `~/SysdsgHubHost` | `pradhapganesanjava/SysDsgHub` | private | the migration history; its working tree is now empty of content |
 
 The local directory names and the repo names differ for historical reasons;
 the table above is the mapping that matters. The site is served at
-<https://pradhapganesanjava.github.io/PGSysdsgHub/> — the path is the public
+<https://pradhapganesanjava.github.io/PGHubSysDsg/> — the path is the public
 repo's name, so renaming that repo moves the site.
 
 They have separate git histories on purpose: the private repo's history contains
