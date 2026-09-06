@@ -119,11 +119,17 @@ from the same Cloud project as the web client; it and the token it mints are
 gitignored.
 
 ```bash
+cd tools && npm install && cd ..      # googleapis; node_modules is gitignored
 python3 tools/build-docs-index.py     # bake the /docs and hub payloads
 node    tools/migrate.mjs --dry-run   # report, write nothing
 node    tools/migrate.mjs             # upload
 node    tools/verify.mjs --write      # read it all back and check it
 ```
+
+The same `npm install` is what `tools/test/integration.mjs` needs — it checks
+the real `drive.js` and `store.js` against the live Drive folder, so it wants
+both the package and the credentials. `tools/test/run.mjs` has no dependencies
+and runs anywhere.
 
 `preflight-delete.mjs` is the one to run before deleting any local copy: it
 walks every file individually and refuses unless each one has a Drive id that
