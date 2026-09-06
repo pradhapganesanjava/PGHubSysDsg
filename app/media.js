@@ -47,11 +47,13 @@ const ASSET_REF = /(["'(])(?:\.\/)?(assets\/[A-Za-z0-9._\-/]+)(["')])/g
  * Fetch an HTML document and return a blob: URL for a self-contained copy,
  * with its relative asset references pointed at Drive.
  */
-async function htmlDocUrl(id) {
+async function htmlDocUrl(id, blob) {
   const key = 'html:' + id
   if (blobs.has(key)) return blobs.get(key)
 
-  const raw  = await (await readBlobById(id)).text()
+  // The caller already downloaded the document to sniff its type; reuse it
+  // rather than fetching the same (sometimes large) file a second time.
+  const raw  = await (blob ?? await readBlobById(id)).text()
   const map  = assetMap()
 
   // Resolve only the assets this document actually mentions.
@@ -76,24 +78,33 @@ async function resolveElement(el) {
   if (!src.startsWith('drive:')) return
   const id = src.slice('drive:'.length)
   if (!id) return
+  // The observer sees both the added node and the src attribute, so the same
+  // element can arrive twice; without this the document is downloaded twice.
+  if (el.dataset.driveResolving === id) return
+  el.dataset.driveResolving = id
   el.dataset.driveId = id
   try {
-    // An HTML document needs its assets rewritten; anything else (PDF, PNG,
-    // SVG) can be handed to the browser as-is.
-    const isFrame = el.tagName === 'IFRAME'
+    if (el.tagName !== 'IFRAME') {
+      el.setAttribute('src', await driveBlobUrl(id))
+      return
+    }
+    // An HTML document needs its relative assets rewritten before it can load
+    // from a blob: URL; anything else (PDF, PNG) is handed over as-is.
+    const cached = blobs.get('html:' + id) ?? blobs.get(id)
+    if (cached) { el.setAttribute('src', cached); return }
+
+    const blob = await readBlobById(id)
     let url
-    if (isFrame) {
-      const blob = await readBlobById(id)
-      url = blob.type.includes('html') ? await htmlDocUrl(id) : URL.createObjectURL(blob)
-      if (!blob.type.includes('html')) {
-        if (!blobs.has(id)) blobs.set(id, url)
-        blobToDrive.set(url, `drive:${id}`)
-      }
+    if (blob.type.includes('html')) {
+      url = await htmlDocUrl(id, blob)
     } else {
-      url = await driveBlobUrl(id)
+      url = URL.createObjectURL(blob)
+      blobs.set(id, url)
+      blobToDrive.set(url, `drive:${id}`)
     }
     el.setAttribute('src', url)
   } catch (e) {
+    delete el.dataset.driveResolving          // let a later attempt retry
     if (el.tagName === 'IMG') el.alt = `[unavailable: ${e.message}]`
   }
 }
