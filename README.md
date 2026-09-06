@@ -170,9 +170,28 @@ bash tools/check-public-safe.sh
 It inspects what git actually tracks — not just what `.gitignore` covers, since
 that does nothing for files committed before the rule existed — and fails on
 credentials, per-module data stores, document and image libraries, baked
-indexes, or a key pasted into source. The same check gates every deploy in
-`.github/workflows/deploy.yml`, so a mistake blocks the publish rather than
-shipping.
+indexes, or a key pasted into source.
+
+Install it as a pre-push hook so it runs automatically:
+
+```bash
+bash tools/install-hooks.sh
+```
+
+That is deliberately a *pre*-push check rather than CI. A workflow can only tell
+you about a leak once the content is already on GitHub and, in a public repo,
+already fetchable by anyone watching. The hook stops the push while the content
+is still only on your machine.
+
+## Hosting
+
+The site is static — no build, no bundler — so GitHub Pages serves the default
+branch directly. There is nothing to compile and no secret to inject at build
+time, because everything the page displays is fetched from Drive in the
+visitor's browser using their own token.
+
+Whatever origin it ends up served from must be added to the OAuth client's
+**Authorized JavaScript origins**, or Google refuses the sign-in popup.
 
 ---
 

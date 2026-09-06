@@ -19,7 +19,7 @@ DEST=${1:-"$(dirname "$SRC")/SysDsgHubPublic"}
 [ -d "$DEST" ] || { echo "  No such directory: $DEST" >&2; exit 1; }
 
 mkdir -p "$DEST/app" "$DEST/vendor" "$DEST/tools/lib" "$DEST/tools/test" \
-         "$DEST/.github/workflows"
+         "$DEST/tools/hooks" "$DEST/.github/workflows"
 
 cp "$SRC"/index.html "$SRC"/module.html "$SRC"/dev.py "$SRC"/README.md \
    "$SRC"/.gitignore "$SRC"/.nojekyll                   "$DEST/"
@@ -29,6 +29,7 @@ cp "$SRC"/tools/*.mjs "$SRC"/tools/*.py "$SRC"/tools/*.sh \
    "$SRC"/tools/package.json                            "$DEST/tools/"
 cp "$SRC"/tools/lib/*.mjs                               "$DEST/tools/lib/"
 cp "$SRC"/tools/test/*.mjs                              "$DEST/tools/test/"
+cp "$SRC"/tools/hooks/*                                 "$DEST/tools/hooks/"
 cp "$SRC"/.github/workflows/deploy.yml                  "$DEST/.github/workflows/"
 
 echo "  synced $SRC -> $DEST"

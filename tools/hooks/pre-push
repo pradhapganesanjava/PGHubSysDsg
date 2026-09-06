@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Refuse to push private content or credentials to the public repository.
+#
+# This runs BEFORE the push, which is the point: the CI equivalent only reports
+# a leak once the content is already on GitHub and, for a public repo, already
+# fetchable. Install with:
+#
+#     bash tools/install-hooks.sh
+#
+# Bypass for a one-off with `git push --no-verify`, and think first.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+if ! bash tools/check-public-safe.sh; then
+  echo "  Push aborted. Nothing has left this machine." >&2
+  exit 1
+fi
