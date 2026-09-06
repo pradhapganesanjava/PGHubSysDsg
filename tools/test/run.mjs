@@ -61,6 +61,9 @@ export const DB = {
                          { name: 'y.html', title: 'Y', type: 'html', driveId: 'D2' } ],
     'assets-map.json': { 'assets/a.svg': 'A1' },
   },
+  docsFolder: false,
+  folderListing: [],
+  driveFiles: {},
   writes: 0,
   delay: 0,
 }
@@ -80,7 +83,11 @@ export async function ensureFolder(p, n) { return p + '/' + n }
 export async function createFile(parent, name) { return 'NEW_' + name }
 export async function readBlobById() { return new Blob(['x']) }
 export async function readJsonById(id, f = {}) { return f }
-export async function findChild() { return null }
+export async function readTextById(id) { return DB.driveFiles?.[id] ?? '' }
+export async function findChild(parent, name) {
+  return name === 'docs' && DB.docsFolder ? { id: 'DOCSFOLDER' } : null
+}
+export async function listFolder() { return DB.folderListing ?? [] }
 export async function rootId() { return 'ROOT' }
 export function clearIdCache() {}
 `)
@@ -222,6 +229,43 @@ await test('entries for vanished docs are pruned', async () => {
   Store._docs = null
   await post('/doctags', { name: 'x.html', tag: 'A' })
   assert.equal('gone.html' in DB.files['docs.json'], false)
+})
+
+await test('a document added to Drive directly shows up', async () => {
+  // Dropping a file into the module's docs/ folder used to be how documents
+  // were added; the folder just lives in Drive now.
+  DB.docsFolder = true
+  DB.folderListing = [
+    { id: 'D1', name: 'x.html' },                 // already in the baked index
+    { id: 'D9', name: 'brand-new.md' },           // not
+    { id: 'D8', name: 'notes.txt' },              // not a document type
+  ]
+  DB.driveFiles = { D9: '# A Fresh Note\n\nbody text' }
+  Store._docs = null
+  const docs = await (await get('/docs')).json()
+
+  const fresh = docs.find(d => d.name === 'brand-new.md')
+  assert.ok(fresh, 'new markdown file was not discovered')
+  assert.equal(fresh.title, 'A Fresh Note', 'title should come from the # heading')
+  assert.equal(fresh.type, 'markdown')
+  assert.ok(fresh.markdown.includes('body text'), 'content should be loaded so it renders')
+  assert.equal(fresh.tag, 'Untagged')
+  assert.equal(docs.filter(d => d.name === 'x.html').length, 1, 'indexed doc duplicated')
+  assert.equal(docs.find(d => d.name === 'notes.txt'), undefined, 'non-document included')
+})
+
+await test('the docs list is sorted by displayed title', async () => {
+  const docs = await (await get('/docs')).json()
+  const titles = docs.map(d => (d.title || d.name).toLowerCase())
+  assert.deepEqual(titles, [...titles].sort(), 'sidebar order would look random')
+})
+
+await test('discovery failing does not break the docs list', async () => {
+  DB.docsFolder = false
+  DB.folderListing = []
+  Store._docs = null
+  const docs = await (await get('/docs')).json()
+  assert.equal(docs.length, 2, 'baked index should still come through')
 })
 
 console.log('\n  blob round-trip\n')

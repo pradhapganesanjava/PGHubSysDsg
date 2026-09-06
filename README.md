@@ -122,6 +122,19 @@ those servers produced rather than a reimplementation that could drift.
 
 ---
 
+## Adding a document
+
+Drop the file into the module's `docs/` folder in Drive. The app lists that
+folder and folds in anything the baked index doesn't know about, so it appears
+in the sidebar on the next load — no migration, no checkout, no deploy.
+
+A new document is browsable and readable immediately. The one thing it lacks is
+its extracted **search** text, which `build-docs-index.py` produces by walking
+the HTML; it becomes searchable after the next migration. New markdown files are
+read on load so they render, and their title comes from the first `# heading`.
+
+---
+
 ## Before making the repository public
 
 ```bash

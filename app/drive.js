@@ -192,6 +192,25 @@ export async function ensureFolder(parentId, name) {
   return id
 }
 
+/** List a folder's children (paginated). Used to notice documents added to
+ *  Drive directly, which the baked index cannot know about. */
+export async function listFolder(parentId) {
+  const out = []
+  let pageToken = ''
+  do {
+    const url = `${FILES}?q=${encodeURIComponent(`'${parentId}' in parents and trashed=false`)}` +
+                `&fields=${encodeURIComponent('nextPageToken,files(id,name,mimeType,modifiedTime)')}` +
+                `&pageSize=1000&supportsAllDrives=true` +
+                (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
+    const r = await GAuth.fetch(url)
+    if (!r.ok) break
+    const data = await r.json()
+    out.push(...(data.files ?? []))
+    pageToken = data.nextPageToken ?? ''
+  } while (pageToken)
+  return out
+}
+
 /** Forget every cached id — used when a lookup unexpectedly 404s. */
 export function clearIdCache() {
   memo.clear()

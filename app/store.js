@@ -20,8 +20,8 @@
  *   after the typing stops, plus unconditionally when the page is hidden or
  *   closed. Callers see the same {ok:true} they always did.
  */
-import { readModuleJson, writeModuleJson, moduleFolderId, ensureFolder, createFile }
-  from './drive.js'
+import { readModuleJson, writeModuleJson, moduleFolderId, ensureFolder, createFile,
+         findChild, listFolder, readTextById } from './drive.js'
 import { ready } from './ready.js'
 import { restoreDriveUrls } from './media.js'
 
@@ -113,15 +113,62 @@ window.addEventListener('beforeunload', e => {
 
 // ── documents ────────────────────────────────────────────────────────────────
 
+const DOC_EXT = /\.(md|markdown|pdf|html?)$/i
+const typeOf = name =>
+  /\.(md|markdown)$/i.test(name) ? 'markdown' : /\.pdf$/i.test(name) ? 'pdf' : 'html'
+
+/**
+ * Documents added to the Drive folder directly, which the baked index cannot
+ * know about.
+ *
+ * Adding a document used to mean dropping a file into the module's docs/
+ * folder. That still works — the folder just lives in Drive now — so the
+ * listing is reconciled against the index and anything new is folded in.
+ * A new markdown file is read so it can render; a new HTML or PDF is not,
+ * since it displays in an iframe from its Drive id alone.
+ *
+ * The one thing a new document lacks is `text`, the extracted search index,
+ * which build-docs-index.py produces. It becomes searchable after the next
+ * migration; until then it is browsable and readable, which beats invisible.
+ */
+async function discoverNewDocs(known) {
+  try {
+    const folder = await moduleFolderId(Store.mod)
+    const docsId = await findChild(folder, 'docs')
+    if (!docsId) return []
+    const files = await listFolder(docsId)
+    const added = files.filter(f => DOC_EXT.test(f.name) && !known.has(f.name))
+    return Promise.all(added.map(async f => {
+      const type = typeOf(f.name)
+      const base = f.name.replace(DOC_EXT, '')
+      const doc  = { name: f.name, title: base, type, driveId: f.id,
+                     markdown: '', text: '', tag: '', tags: [] }
+      if (type === 'markdown') {
+        try {
+          const md = await readTextById(f.id)
+          doc.markdown = md
+          doc.text = md
+          const h = md.split('\n').find(l => /^\s*#\s+\S/.test(l))
+          if (h) doc.title = h.replace(/^\s*#\s+/, '').trim()
+        } catch { /* leave it titled by filename */ }
+      }
+      return doc
+    }))
+  } catch { return [] }
+}
+
 async function docsIndex() {
   if (Store._docs) return Store._docs
   const idx = await readModuleJson(Store.mod, 'docs-index.json', [])
   Store._assets = await readModuleJson(Store.mod, 'assets-map.json', {})
   const tags = await readModuleJson(Store.mod, 'docs.json', {})
 
+  const baked = Array.isArray(idx) ? idx : []
+  const all = baked.concat(await discoverNewDocs(new Set(baked.map(d => d.name))))
+
   // Tags are edited live, so they are applied from docs.json at read time
   // rather than trusted from the baked index.
-  Store._docs = (Array.isArray(idx) ? idx : []).map(d => {
+  Store._docs = all.map(d => {
     const meta = tags[d.name] ?? {}
     return {
       ...d,
@@ -131,7 +178,9 @@ async function docsIndex() {
       // pre-fetching 677 documents would be absurd.
       url:  d.driveId ? `drive:${d.driveId}` : '',
     }
-  })
+  // The sidebar shows `title`, so sort by that, as the old server did.
+  }).sort((a, b) => (a.title || a.name).toLowerCase()
+        .localeCompare((b.title || b.name).toLowerCase()))
   return Store._docs
 }
 
