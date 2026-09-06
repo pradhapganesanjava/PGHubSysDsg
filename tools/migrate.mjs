@@ -277,7 +277,8 @@ async function writeManifest(sheets, sheetId, hub, state) {
   }
 
   const meta = await withRetry('sheet get',
-    () => sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'sheets.properties' }))
+    () => sheets.spreadsheets.get({ spreadsheetId: sheetId,
+                                    fields: 'sheets.properties(title,sheetId)' }))
   const have = new Set((meta.data.sheets ?? []).map(s => s.properties.title))
   const add  = Object.keys(tabs).filter(t => !have.has(t))
   if (add.length) {
@@ -286,6 +287,18 @@ async function writeManifest(sheets, sheetId, hub, state) {
       requestBody: { requests: add.map(title => ({ addSheet: { properties: { title } } })) },
     }))
   }
+  // A newly created spreadsheet comes with an empty default sheet. Once our own
+  // tabs exist it is just clutter in a file meant to be read by a person.
+  // Checked on every run, not only the one that creates the tabs, so a sheet
+  // left over from an earlier migration still gets tidied up.
+  const defaultTab = (meta.data.sheets ?? []).find(sh => sh.properties.title === 'Sheet1')
+  if (defaultTab && !('Sheet1' in tabs)) {
+    await withRetry('drop Sheet1', () => sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ deleteSheet: { sheetId: defaultTab.properties.sheetId } }] },
+    })).catch(() => { /* already gone, or it is the only sheet left */ })
+  }
+
   for (const [title, values] of Object.entries(tabs)) {
     await withRetry(`clear ${title}`,
       () => sheets.spreadsheets.values.clear({ spreadsheetId: sheetId, range: title }))
