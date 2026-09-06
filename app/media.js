@@ -43,6 +43,15 @@ export async function driveBlobUrl(id) {
 
 const ASSET_REF = /(["'(])(?:\.\/)?(assets\/[A-Za-z0-9._\-/]+)(["')])/g
 
+/* Assets that are third-party libraries rather than anyone's content, and are
+ * already served from this site. Mermaid is 3.3 MB: pulling it out of Drive on
+ * every session added ten seconds to opening any document that draws a diagram,
+ * to fetch a public library the repo ships anyway. Served locally it is a
+ * normal cached static file. Keyed by the path the documents reference. */
+const VENDORED = {
+  'assets/js/mermaid.min.js': 'vendor/mermaid.min.js',
+}
+
 /**
  * Fetch an HTML document and return a blob: URL for a self-contained copy,
  * with its relative asset references pointed at Drive.
@@ -66,10 +75,15 @@ async function buildHtmlDoc(id, blob, key) {
   const raw  = await (blob ?? await readBlobById(id)).text()
   const map  = assetMap()
 
-  // Resolve only the assets this document actually mentions.
-  const wanted = new Set()
-  for (const m of raw.matchAll(ASSET_REF)) if (map[m[2]]) wanted.add(m[2])
+  // Resolve only the assets this document actually mentions, and only those
+  // that are not served from this site already.
   const resolved = new Map()
+  const wanted = new Set()
+  for (const m of raw.matchAll(ASSET_REF)) {
+    const rel = m[2]
+    if (VENDORED[rel]) resolved.set(rel, new URL(VENDORED[rel], location.href).href)
+    else if (map[rel]) wanted.add(rel)
+  }
   await Promise.all([...wanted].map(async rel => {
     try { resolved.set(rel, await driveBlobUrl(map[rel])) } catch { /* leave broken */ }
   }))
