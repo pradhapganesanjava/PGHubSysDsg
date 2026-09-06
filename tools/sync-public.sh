@@ -19,7 +19,7 @@ DEST=${1:-"$(dirname "$SRC")/SysDsgHubPublic"}
 [ -d "$DEST" ] || { echo "  No such directory: $DEST" >&2; exit 1; }
 
 mkdir -p "$DEST/app" "$DEST/vendor" "$DEST/tools/lib" "$DEST/tools/test" \
-         "$DEST/tools/hooks" "$DEST/.github/workflows"
+         "$DEST/tools/hooks"
 
 cp "$SRC"/index.html "$SRC"/module.html "$SRC"/dev.py "$SRC"/README.md \
    "$SRC"/.gitignore "$SRC"/.nojekyll                   "$DEST/"
@@ -30,7 +30,16 @@ cp "$SRC"/tools/*.mjs "$SRC"/tools/*.py "$SRC"/tools/*.sh \
 cp "$SRC"/tools/lib/*.mjs                               "$DEST/tools/lib/"
 cp "$SRC"/tools/test/*.mjs                              "$DEST/tools/test/"
 cp "$SRC"/tools/hooks/*                                 "$DEST/tools/hooks/"
-cp "$SRC"/.github/workflows/deploy.yml                  "$DEST/.github/workflows/"
+
+# The GitHub Actions workflow is deliberately NOT copied. Pushing a file under
+# .github/workflows/ needs the `workflow` OAuth scope, which the account that
+# owns the public repo does not have, so including it makes every push fail.
+# The site needs no build anyway — Pages serves the branch directly — and the
+# safety check that workflow ran now runs earlier, as a pre-push hook.
+#
+# To restore CI: grant the scope (`gh auth refresh -s workflow`), then
+#   mkdir -p "$DEST/.github/workflows"
+#   cp "$SRC"/.github/workflows/deploy.yml "$DEST/.github/workflows/"
 
 echo "  synced $SRC -> $DEST"
 ( cd "$DEST" && git add -A >/dev/null 2>&1 || true
