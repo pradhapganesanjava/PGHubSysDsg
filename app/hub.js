@@ -41,9 +41,13 @@ async function hubIndex() {
   const mods = await Promise.all(Object.entries(hub.modules ?? {}).map(async ([dir, m]) => {
     const [terms, qa, topics] = await Promise.all(
       ['terms', 'qa', 'topics'].map(t => modData(dir, t)))
-    const list = (obj, ...keys) => Object.entries(obj).flatMap(([k, v]) =>
-      v && typeof v === 'object'
+    // Sorted by (group, label) to match what serve_hub.py's build_index
+    // emitted, so the tree reads the same whichever path produced it.
+    const list = (obj, ...keys) => Object.entries(obj)
+      .flatMap(([k, v]) => v && typeof v === 'object'
         ? [{ id: v.id ?? k, label: label(v, keys), group: v.group ?? '' }] : [])
+      .sort((a, b) => a.group.toLowerCase().localeCompare(b.group.toLowerCase())
+                   || a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
     return {
       dir, title: m.title ?? dir, emoji: m.emoji ?? '',
       terms:  list(terms, 'title'),
