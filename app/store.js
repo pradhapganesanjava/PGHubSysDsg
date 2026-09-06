@@ -33,9 +33,12 @@ const FILE_OF = {
   topics: 'topics.json',
   notes:  'notes.json',
 }
-const UNTAGGED   = 'Untagged'
-const FLUSH_MS   = 900
-const DOC_EXT_RE = /\.(md|markdown|pdf|html?|)$/i
+const UNTAGGED = 'Untagged'
+const FLUSH_MS = 900
+
+// The endpoints this module owns. Matched on the last path segment so the app
+// works unchanged under a GitHub Pages subpath.
+const OURS = new Set(['terms', 'qa', 'topics', 'notes', 'docs', 'doctags', 'upload'])
 
 export const Store = {
   mod: null,
@@ -231,19 +234,16 @@ export function installStore(moduleId) {
   else window.fetch = handleRequest
 
   async function handleRequest(input, init = {}) {
-    const req  = input instanceof Request ? input : new Request(input, init)
-    const url  = new URL(req.url, location.href)
-    const path = url.pathname.replace(/\/+$/, '') || '/'
-    const same = url.origin === location.origin
+    const req = input instanceof Request ? input : new Request(input, init)
+    const url = new URL(req.url, location.href)
 
     // Only same-origin app endpoints are ours; everything else is untouched.
-    if (!same) return nativeFetch(input, init)
+    if (url.origin !== location.origin) return nativeFetch(input, init)
 
-    const key = path.startsWith('/') ? path.slice(1) : path
-    const method = req.method.toUpperCase()
-
-    const OURS = new Set(['terms', 'qa', 'topics', 'notes', 'docs', 'doctags', 'upload'])
+    const key = url.pathname.replace(/\/+$/, '').replace(/^.*\//, '')
     if (!OURS.has(key)) return nativeFetch(input, init)
+
+    const method = req.method.toUpperCase()
 
     // Hold the app's opening requests until there is a token to spend on them.
     await ready
