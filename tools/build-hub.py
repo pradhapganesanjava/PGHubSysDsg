@@ -144,6 +144,14 @@ async function probe(port){ try{ await fetch("http://127.0.0.1:"+port+"/favicon.
         <div class="cmd"><span>./start.command</span> <button class="mini" id="copyCmd">Copy</button></div>''',
      HOWTO),
 
+    # Dead once module.html stopped reading it: the hub and the modules are one
+    # origin now. It also recorded location.origin, which is wrong under a
+    # GitHub Pages subpath.
+    ("hub-url cookie",
+     '''_setCookie("sysdsg_hub", location.origin + "/");
+''',
+     ''''''),
+
     ("footnote",
      '''<p class="footnote" id="hubFootnote">Modules &amp; ports are defined in <code>hub.json</code>. The tree, search and previews are built live from each module's data files.</p>''',
      '''<p class="footnote" id="hubFootnote">Content is read from Google Drive. The tree, search and previews are built live from each module's data.</p>'''),

@@ -23,6 +23,7 @@
 import { readModuleJson, writeModuleJson, moduleFolderId, ensureFolder, createFile }
   from './drive.js'
 import { ready } from './ready.js'
+import { restoreDriveUrls } from './media.js'
 
 const nativeFetch = window.fetch.bind(window)
 
@@ -207,8 +208,10 @@ function applyItem(map, item) {
   const id = String(item.id ?? '').trim()
   if (!id) return json({ error: 'Missing id' }, 400)
   delete item._app
+  // Any image the media layer resolved is a blob: URL by now; store the
+  // durable drive: reference instead.
   if (item._delete) delete map[id]
-  else map[id] = item
+  else map[id] = restoreDriveUrls(item)
   return json({ ok: true })
 }
 
@@ -252,7 +255,7 @@ export function installStore(moduleId) {
           const id = String(p.id ?? '').trim()
           if (!id) return json({ error: 'Missing id' }, 400)
           const notes = await load('notes')
-          notes[id] = p.html ?? ''
+          notes[id] = restoreDriveUrls(p.html ?? '')
           markDirty('notes')
           return json({ ok: true })
         }

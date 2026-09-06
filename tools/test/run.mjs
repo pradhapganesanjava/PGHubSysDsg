@@ -196,6 +196,29 @@ await test('entries for vanished docs are pruned', async () => {
   assert.equal('gone.html' in DB.files['docs.json'], false)
 })
 
+console.log('\n  blob round-trip\n')
+
+await test('a blob: URL is stored back as its drive: reference', async () => {
+  // Mirrors what happens in the browser: media.js hands the DOM a blob: URL,
+  // the editor serialises innerHTML, and the store must persist drive: again.
+  const media = await import(u('media.js'))
+  const blobUrl = URL.createObjectURL(new Blob(['x']))
+  // Reach into the same map media.js populates when it resolves an image.
+  const restored = (() => {
+    // simulate resolution by round-tripping through the public helper after
+    // registering the mapping the way driveBlobUrl would
+    media.__test_register?.(blobUrl, 'drive:IMG1')
+    return media.restoreDriveUrls(`<p><img src="${blobUrl}"></p>`)
+  })()
+  assert.equal(restored, '<p><img src="drive:IMG1"></p>')
+})
+
+await test('strings without blob: URLs are returned untouched', async () => {
+  const media = await import(u('media.js'))
+  const html = '<p><img src="drive:D9"></p>'
+  assert.equal(media.restoreDriveUrls(html), html)
+})
+
 console.log('\n  upload\n')
 
 await test('an image upload returns a drive: url', async () => {

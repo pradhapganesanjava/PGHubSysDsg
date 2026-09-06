@@ -2014,7 +2014,7 @@ function wrapInlineCode(editor) {
 }
 
 /* ---- Theme picker (shared across ALL SysDsg modules via a host cookie) ----
-   Cookies ignore port, so 127.0.0.1:8301..8308 + the hub all share one theme. */
+   The theme is shared with the hub landing page, which is same-origin. */
 const themeSel = document.getElementById("theme");
 function _setCookie(k, v){ try { document.cookie = k + "=" + encodeURIComponent(v) + ";path=/;max-age=31536000;SameSite=Lax"; } catch(e){} }
 function _getCookie(k){ var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + k + "=([^;]+)")); return m ? decodeURIComponent(m[1]) : null; }
@@ -2039,11 +2039,11 @@ document.addEventListener("visibilitychange", function(){
   var a = document.createElement("a");
   a.id = "hub-home"; a.textContent = "\uD83E\uDDED";
   a.title = "Back to System Design Hub"; a.setAttribute("aria-label", "Back to System Design Hub");
-  a.href = _getCookie("sysdsg_hub") || "http://127.0.0.1:8300/";
+  a.href = "./";
   document.body.appendChild(a);
   // header Home button (left of the nav-toggle) points at the same hub URL
   var hb = document.getElementById("hub-home-btn");
-  if (hb) hb.href = _getCookie("sysdsg_hub") || "http://127.0.0.1:8300/";
+  if (hb) hb.href = "./";
 })();
 
 /* ---- Rebuild views after the term/QA list changes ---- */
@@ -2950,7 +2950,7 @@ function enterDocs() {
     } else {
       detail.innerHTML = `<div class="markdown-body"><p style="color:var(--muted)">${SERVER
         ? "No <code>.md</code> files in the <code>docs/</code> folder yet — drop some in and reload."
-        : "Docs load via the local server. Run <code>python3 server.py</code> and open <code>http://127.0.0.1:8000/</code>."}</p></div>`;
+        : "Docs live in Google Drive — sign in to load them."}</p></div>`;
     }
   });
 }

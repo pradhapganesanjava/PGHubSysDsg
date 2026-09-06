@@ -67,6 +67,24 @@ identity from `hub.json` at runtime.
 
 ---
 
+## Two checkouts
+
+| Checkout | Visibility | Holds |
+|---|---|---|
+| `SysDsgHubPublic` | public | this code — the published site |
+| `SysdsgHubHost` | private | the original content, kept as an archive |
+
+They have separate git histories on purpose: the private repo's history contains
+the content, and GitHub can keep unreachable objects retrievable by commit SHA
+long after a force-push, so rewriting it would not have been airtight.
+
+Day-to-day the content is edited in the app and saved to Drive, and code is
+edited here. The migration tools are the exception — they read `hub.json` and
+the per-module folders off disk, so they only run in the private checkout.
+`tools/sync-public.sh` copies code from there to here.
+
+---
+
 ## Running it locally
 
 ```bash

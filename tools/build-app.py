@@ -82,6 +82,23 @@ def build(base_dir, out_path):
         # absolute path never resolved on any host; vendor it relatively
         (re.compile(r'<script src="/vendor/mermaid\.min\.js"></script>'),
          '<script src="vendor/mermaid.min.js"></script>'),
+
+        # The hub used to live on its own origin (port 8300), so its URL was
+        # passed between apps in a cookie. Hub and module are now the same
+        # static site, so both fall back to a relative link and the cookie
+        # lookup goes away — it could only ever produce a dead localhost URL.
+        (re.compile(r'a\.href = _getCookie\("sysdsg_hub"\) \|\| "http://127\.0\.0\.1:\d+/";'),
+         'a.href = "./";'),
+        (re.compile(r'if \(hb\) hb\.href = _getCookie\("sysdsg_hub"\) \|\| "http://127\.0\.0\.1:\d+/";'),
+         'if (hb) hb.href = "./";'),
+        (re.compile(r'   Cookies ignore port, so 127\.0\.0\.1:\d+\.\.\d+ \+ the hub all share one theme\. \*/'),
+         '   The theme is shared with the hub landing page, which is same-origin. */'),
+
+        # Stale offline message: there is no local server to run any more.
+        (re.compile(
+            r'        : "Docs load via the local server\. Run <code>python3 server\.py</code> '
+            r'and open <code>http://127\.0\.0\.1:\d+/</code>\."\}</p></div>`;'),
+         '        : "Docs live in Google Drive — sign in to load them."}</p></div>`;'),
     ]
     for pat, repl in subs:
         html, n = pat.subn(repl, html, count=1)

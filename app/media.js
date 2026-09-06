@@ -17,8 +17,14 @@
 import { readBlobById } from './drive.js'
 import { assetMap }     from './store.js'
 
-const blobs = new Map()     // driveId | 'html:'+driveId -> blob: URL
+const blobs = new Map()        // driveId | 'html:'+driveId -> blob: URL
 const inFlight = new Map()
+// The reverse direction, and the reason it exists: the note editor saves
+// whatever is in the DOM (serialize() returns innerHTML), and by then this
+// module has rewritten every <img src="drive:…"> to a blob: URL. Persisting
+// those would store a reference that dies with the page. The store consults
+// this map on save to put the drive: URL back. See restoreDriveUrls.
+const blobToDrive = new Map()
 
 /** Drive id -> blob: URL, fetched once and reused. */
 export async function driveBlobUrl(id) {
@@ -28,6 +34,7 @@ export async function driveBlobUrl(id) {
     const blob = await readBlobById(id)
     const url  = URL.createObjectURL(blob)
     blobs.set(id, url)
+    blobToDrive.set(url, `drive:${id}`)
     return url
   })().finally(() => inFlight.delete(id))
   inFlight.set(id, p)
@@ -60,6 +67,7 @@ async function htmlDocUrl(id) {
 
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
   blobs.set(key, url)
+  blobToDrive.set(url, `drive:${id}`)
   return url
 }
 
@@ -77,7 +85,10 @@ async function resolveElement(el) {
     if (isFrame) {
       const blob = await readBlobById(id)
       url = blob.type.includes('html') ? await htmlDocUrl(id) : URL.createObjectURL(blob)
-      if (!blobs.has(id) && !blob.type.includes('html')) blobs.set(id, url)
+      if (!blob.type.includes('html')) {
+        if (!blobs.has(id)) blobs.set(id, url)
+        blobToDrive.set(url, `drive:${id}`)
+      }
     } else {
       url = await driveBlobUrl(id)
     }
@@ -92,6 +103,33 @@ function scan(root) {
   if (root.matches?.('img[src^="drive:"], iframe[src^="drive:"]')) resolveElement(root)
   root.querySelectorAll?.('img[src^="drive:"], iframe[src^="drive:"]').forEach(resolveElement)
 }
+
+/**
+ * Put drive: URLs back wherever this module swapped in a blob: URL.
+ * Called by the store on every write, so what is persisted always references
+ * Drive rather than a URL that expires with the page.
+ */
+export function restoreDriveUrls(value) {
+  if (typeof value === 'string') {
+    if (!value.includes('blob:')) return value
+    let out = value
+    for (const [blobUrl, driveUrl] of blobToDrive) {
+      if (out.includes(blobUrl)) out = out.replaceAll(blobUrl, driveUrl)
+    }
+    return out
+  }
+  if (Array.isArray(value)) return value.map(restoreDriveUrls)
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const k in value) out[k] = restoreDriveUrls(value[k])
+    return out
+  }
+  return value
+}
+
+/* Test hook: lets the store's test suite register a mapping without a DOM or a
+   real Drive round trip. Harmless in production — nothing calls it there. */
+export function __test_register(blobUrl, driveUrl) { blobToDrive.set(blobUrl, driveUrl) }
 
 export function installMedia() {
   scan(document.body)
