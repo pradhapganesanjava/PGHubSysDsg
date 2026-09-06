@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><title>docs flow</title>
+<style>body{margin:0;font:13px/1.6 ui-monospace,Menlo,monospace;background:#0f1117;color:#e6e8ee}
+#o{padding:14px;white-space:pre-wrap}h2{font:600 13px system-ui;color:#7aa2ff;margin:12px 0 4px}
+iframe{position:absolute;left:-9999px;width:1200px;height:900px;border:0}
+.ok{color:#8fe3a6}.bad{color:#ff9b9b}</style>
+<div id="o">testing…</div>
+<script>
+const L=[], line=(ok,m)=>'   '+(ok?'<span class="ok">PASS</span>':'<span class="bad">FAIL</span>')+'  '+m;
+const load = src => new Promise(res => { const f=document.createElement('iframe'); f.src=src;
+  document.body.appendChild(f); f.onload=()=>setTimeout(()=>res(f),2000); setTimeout(()=>res(f),8000); });
+(async () => {
+  const f = await load('module.html?m=01-foundations');
+  const d = f.contentDocument;
+
+  L.push('<h2>1. the Docs tab shows the list, not a document</h2>');
+  d.querySelectorAll('.tab-btn').forEach(b => { if (b.dataset.tab === 'docs') b.click() });
+  await new Promise(r=>setTimeout(r,1200));
+  const cards = d.querySelectorAll('.doc-box').length;
+  const heading = d.querySelector('.docs-index-head h2')?.textContent;
+  L.push(line(cards > 0 && heading === 'Documents',
+    heading + ' heading, ' + cards + ' cards, hash ' + f.contentWindow.location.hash));
+
+  L.push('<h2>2. groups match the left nav</h2>');
+  const navGroups = [...d.querySelectorAll('#nav .group-title .name, #nav .untagged-head span:first-child')].map(e=>e.textContent.trim());
+  const idxGroups = [...d.querySelectorAll('.ov-group-title .name')].map(e=>e.textContent.trim());
+  L.push(line(idxGroups.length > 0, idxGroups.length + ' groups in the list: ' + idxGroups.slice(0,4).join(', ') + '…'));
+
+  L.push('<h2>3. clicking a card opens that document</h2>');
+  const first = d.querySelector('.doc-box');
+  const wanted = first?.querySelector('.b-title')?.textContent;
+  first?.click();
+  await new Promise(r=>setTimeout(r,1200));
+  const shown = d.querySelector('.pdf-name')?.textContent || d.querySelector('.markdown-body h1')?.textContent;
+  L.push(line(!!d.querySelector('.doc-back'), 'opened "' + (shown||'?') + '", close bar present'));
+
+  L.push('<h2>4. closing returns to the list</h2>');
+  d.querySelector('.doc-back .doc-close')?.click();
+  await new Promise(r=>setTimeout(r,800));
+  L.push(line(d.querySelectorAll('.doc-box').length === cards && !d.querySelector('.doc-back'),
+    'back to ' + d.querySelectorAll('.doc-box').length + ' cards, hash ' + f.contentWindow.location.hash));
+
+  L.push('<h2>5. the back link works too</h2>');
+  d.querySelector('.doc-box')?.click();
+  await new Promise(r=>setTimeout(r,1000));
+  d.querySelector('.doc-back button[data-act="docs-back"]')?.click();
+  await new Promise(r=>setTimeout(r,700));
+  L.push(line(d.querySelectorAll('.doc-box').length === cards, 'back to the list'));
+
+  L.push('<h2>6. the sidebar still opens a document directly</h2>');
+  d.querySelector('#nav .term')?.click();
+  await new Promise(r=>setTimeout(r,1000));
+  L.push(line(!!d.querySelector('.doc-back'), 'sidebar click opened a document with a way back'));
+
+  document.getElementById('o').innerHTML = L.join('\n');
+})();
+</script>

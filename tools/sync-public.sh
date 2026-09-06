@@ -35,7 +35,8 @@ cp "$SRC"/tools/test/*.mjs                              "$DEST/tools/test/"
 cp "$SRC"/tools/hooks/*                                 "$DEST/tools/hooks/"
 mkdir -p "$DEST/tools/mobile"
 cp "$SRC"/tools/mobile/build-harness.mjs "$SRC"/tools/mobile/shoot.sh \
-   "$SRC"/tools/mobile/themetest.html "$DEST/tools/mobile/"
+   "$SRC"/tools/mobile/themetest.html "$SRC"/tools/mobile/docstest.html \
+   "$DEST/tools/mobile/"
 
 # The GitHub Actions workflow is deliberately NOT copied. Pushing a file under
 # .github/workflows/ needs the `workflow` OAuth scope, which the account that

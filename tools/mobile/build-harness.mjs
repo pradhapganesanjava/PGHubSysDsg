@@ -240,7 +240,7 @@ function inspect(doc, label) {
 `)
 // Diagnostic pages live beside this script as real files rather than as
 // strings inside it — easier to edit, and they cannot break the build.
-for (const f of ['themetest.html']) {
+for (const f of ['themetest.html', 'docstest.html']) {
   try { await cp(join(__dir, f), join(OUT, f)) } catch { /* optional */ }
 }
 console.log('  harness built at', OUT)

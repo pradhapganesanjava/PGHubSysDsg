@@ -450,6 +450,25 @@
   .ov-group-title .count { font-size: 11px; color: var(--muted); background: var(--chip); padding: 2px 8px; border-radius: 10px; }
   .ov-group.ov-nested { margin-bottom: 18px; border-left: 2px solid var(--border); padding-left: 14px; }
   .ov-group.ov-nested .ov-group-title .name { font-size: 13.5px; color: var(--muted); }
+  /* Docs landing list: the same tag tree the left nav shows, as cards. The tab
+     used to jump straight into whichever document sorted first, which meant
+     there was no way to see what a module actually contained. */
+  .docs-index-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 18px; }
+  .docs-index-head h2 { font-size: 1.15rem; margin: 0; }
+  .docs-index-head .count { color: var(--muted); font-size: .85rem; }
+  .doc-box .b-title { font-weight: 600; font-size: 14px; line-height: 1.35; }
+  .doc-box .b-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); margin-top: 6px; }
+
+  /* Close bar above an open document — a document is something you come back
+     from, so it needs a way out that does not depend on the sidebar. */
+  .doc-back { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .doc-back button { background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 8px; padding: 5px 11px; font-size: 12px;
+    font-family: inherit; font-weight: 600; cursor: pointer; }
+  .doc-back button:hover { color: var(--text); border-color: var(--accent); }
+  .doc-back .doc-close { margin-left: auto; padding: 5px 9px; }
+
   .boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
   .box {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -2979,7 +2998,12 @@ function renderDoc(name) {
   if (!doc) return false;
   currentDocName = name;
   markActive(name);
-  const tagBar = docTagBarHTML(doc);
+  const backBar =
+    `<div class="doc-back">` +
+      `<button type="button" data-act="docs-back">← All documents</button>` +
+      `<button type="button" class="doc-close" data-act="docs-back" title="Close document" aria-label="Close document">✕</button>` +
+    `</div>`;
+  const tagBar = backBar + docTagBarHTML(doc);
   if (doc.type === "pdf" || doc.type === "html") {
     // both render in an isolated iframe — an HTML doc keeps its own CSS/JS
     // instead of clashing with the app's stylesheet.
@@ -2995,24 +3019,97 @@ function renderDoc(name) {
     attachLinkPreviews(detail);
   }
   mountDocTagBar(detail, doc);
+  detail.querySelectorAll('[data-act="docs-back"]').forEach(b =>
+    b.addEventListener("click", renderDocsIndex));
   history.replaceState(null, "", "#doc/" + encodeURIComponent(name));
   main.scrollTop = 0;
   return true;
 }
 
-/* entry point for the Docs tab (top tab or sidebar tab): show a doc, or a hint if none */
+/* One card per document, grouped exactly as the left nav groups them. */
+function docBox(d) {
+  const el = document.createElement("div");
+  el.className = "box doc-box";
+  el.innerHTML = `<div class="b-title">${escapeHtml(d.title || d.name)}</div>` +
+                 `<div class="b-kind">${d.type === "markdown" ? "Markdown" : d.type === "pdf" ? "PDF" : "Page"}</div>`;
+  el.title = d.name;
+  el.addEventListener("click", () => selectDoc(d.name));
+  return el;
+}
+
+function renderDocsIndexNode(node, container, depth) {
+  node.order.forEach(key => {
+    const child = node.children[key];
+    const wrap = document.createElement("div");
+    wrap.className = "ov-group" + (depth > 0 ? " ov-nested" : "");
+    if (depth > 0) wrap.style.marginLeft = (depth * 18) + "px";
+    wrap.innerHTML = `<div class="ov-group-title"><span class="name">${escapeHtml(child.name)}</span>` +
+                     `<span class="count">${countTree(child)}</span></div>`;
+    if (child.terms.length) {
+      const boxes = document.createElement("div");
+      boxes.className = "boxes";
+      child.terms.forEach(d => boxes.appendChild(docBox(d)));
+      wrap.appendChild(boxes);
+    }
+    container.appendChild(wrap);
+    renderDocsIndexNode(child, wrap, depth + 1);
+  });
+}
+
+/* The Docs landing page: what this module actually holds. */
+function renderDocsIndex() {
+  currentDocName = null;
+  markActive(null);
+  detail.innerHTML = "";
+  if (!DOCS.length) {
+    detail.innerHTML = `<div class="markdown-body"><p style="color:var(--muted)">${SERVER
+      ? "No documents in this module yet."
+      : "Docs live in Google Drive — sign in to load them."}</p></div>`;
+    history.replaceState(null, "", "#docs");
+    return;
+  }
+  const head = document.createElement("div");
+  head.className = "docs-index-head";
+  head.innerHTML = `<h2>Documents</h2><span class="count">${DOCS.length}</span>`;
+  detail.appendChild(head);
+
+  // Untagged first and flat — same order the sidebar uses, for the same reason:
+  // they are the ones still waiting to be filed.
+  const untagged = DOCS.filter(d => docTagOf(d) === UNTAGGED);
+  const tagged   = DOCS.filter(d => docTagOf(d) !== UNTAGGED);
+  if (untagged.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "ov-group";
+    wrap.innerHTML = `<div class="ov-group-title"><span class="name">${UNTAGGED}</span>` +
+                     `<span class="count">${untagged.length}</span></div>`;
+    const boxes = document.createElement("div");
+    boxes.className = "boxes";
+    untagged.forEach(d => boxes.appendChild(docBox(d)));
+    wrap.appendChild(boxes);
+    detail.appendChild(wrap);
+  }
+  if (tagged.length) {
+    const byTag = new Map();
+    tagged.forEach(d => {
+      const t = docTagOf(d);
+      if (!byTag.has(t)) byTag.set(t, []);
+      byTag.get(t).push(d);
+    });
+    const groups = [...byTag.keys()].sort((a, b) => a.localeCompare(b))
+                                    .map(name => ({ name, terms: byTag.get(name) }));
+    renderDocsIndexNode(buildTree(groups), detail, 0);
+  }
+  history.replaceState(null, "", "#docs");
+  main.scrollTop = 0;
+}
+
+/* entry point for the Docs tab (top tab or sidebar tab): the list, always.
+   Opening whichever document happened to sort first hid everything else. */
 function enterDocs() {
   loadDocs().then(() => {
     setNavSection("docs");
     showDocsPane();
-    if (DOCS.length) {
-      const pick = currentDocName && DOCS.find(d => d.name === currentDocName) ? currentDocName : DOCS[0].name;
-      renderDoc(pick);
-    } else {
-      detail.innerHTML = `<div class="markdown-body"><p style="color:var(--muted)">${SERVER
-        ? "No <code>.md</code> files in the <code>docs/</code> folder yet — drop some in and reload."
-        : "Docs live in Google Drive — sign in to load them."}</p></div>`;
-    }
+    renderDocsIndex();
   });
 }
 
@@ -3104,11 +3201,16 @@ async function boot() {
   btnFlat.classList.toggle("active", savedView !== "tree");
   renderSidebar(savedView);
   const initial = location.hash.slice(1);
-  if (initial.startsWith("doc/")) {               // deep link to a doc: #doc/<filename>
+  if (initial === "docs") {                       // the Docs landing list
+    await loadDocs();
+    enterDocs();
+  } else if (initial.startsWith("doc/")) {        // deep link to a doc: #doc/<filename>
     const nm = decodeURIComponent(initial.slice(4));
     await loadDocs();
     if (DOCS.find(d => d.name === nm)) selectDoc(nm);
-    else select(GROUPS[0].terms[0].id);
+    // A link to a document that has since been renamed or removed should land
+    // on the list it belongs to, not on an unrelated term.
+    else enterDocs();
   } else if (initial.startsWith("topic/") && TOPIC_INDEX[initial.slice(6)]) {
     selectTopic(initial.slice(6));                // #topic/<id>
     loadDocs();
