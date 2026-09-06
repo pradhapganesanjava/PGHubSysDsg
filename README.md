@@ -131,6 +131,30 @@ the real `drive.js` and `store.js` against the live Drive folder, so it wants
 both the package and the credentials. `tools/test/run.mjs` has no dependencies
 and runs anywhere.
 
+### Search
+
+The hub searches the full text of every term, Q&A, topic and document across
+every module, against an index baked into Drive:
+
+```bash
+node tools/build-search-index.mjs --dry-run   # report size, write nothing
+node tools/build-search-index.mjs             # build and upload
+```
+
+Re-run it after adding or editing content, or the new material will not be
+findable from the hub.
+
+It reads from Drive rather than disk, so unlike the other tools it needs no
+content checkout. The index is *inverted* — word to the items containing it —
+because the text itself is 16 MB, far too much to ship to a browser. Truncating
+the text to fit was measured at 0.91 MB gzipped while covering only 79% of
+items and 37% of documents; the inverted index is 0.86 MB and covers all of it.
+The trade is that results carry no snippet.
+
+The hub fetches it on the first search, not at page load.
+
+---
+
 `preflight-delete.mjs` is the one to run before deleting any local copy: it
 walks every file individually and refuses unless each one has a Drive id that
 still resolves. It is what caught two pasted note images that a count-based

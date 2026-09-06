@@ -194,8 +194,12 @@
   .btype{margin:8px 0}
   .btype .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px}
   .pills{display:flex;flex-wrap:wrap;gap:7px}
+  /* max-width is capped, not just 100%: a Q&A label is the whole question, and
+     one of them is 600 characters, which stretched a single pill across the
+     entire row and made the list unscannable. */
   .pill{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;
-    padding:6px 11px;font-size:.83rem;cursor:pointer;font-family:inherit;max-width:100%;
+    padding:6px 11px;font-size:.83rem;cursor:pointer;font-family:inherit;
+    max-width:min(100%,34rem);text-decoration:none;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:border-color .12s,background .12s}
   .pill:hover{border-color:var(--accent);background:var(--accent-soft)}
   .pill .k{color:var(--muted);font-size:.68rem;opacity:.8;margin-left:6px}
@@ -359,7 +363,7 @@
     <div class="searchrow">
       <div class="search-wrap">
         <span class="mag">🔎</span>
-        <input id="mainSearch" type="search" placeholder="Search terms, Q&amp;A, topics across all modules…" autocomplete="off">
+        <input id="mainSearch" type="search" placeholder="Search everything — terms, Q&amp;A, topics, documents…" autocomplete="off">
       </div>
     </div>
 
@@ -682,10 +686,67 @@ document.getElementById("treeSearch").addEventListener("input", e => runSearch(e
 document.getElementById("btn-tree").addEventListener("click", () => setTreeMode("tree"));
 document.getElementById("btn-flat").addEventListener("click", () => setTreeMode("flat"));
 document.getElementById("btn-collapse").addEventListener("click", toggleExpandAll);
+/* ---- full-text search across every module ----
+   The old behaviour filtered the titles already rendered in Browse, which
+   meant it could not see a term's body and could not see documents at all.
+   This queries the index baked by tools/build-search-index.mjs, which covers
+   the full text of every term, Q&A, topic and document. The index is fetched
+   on the first search rather than at page load, so the hub still opens
+   instantly. */
 const mainSearch = document.getElementById("mainSearch");
+let searchToken = 0;
+
+function searchResultsHTML(results, q){
+  if (!results.length)
+    return `<p class="no-results">Nothing matches <b>${esc(q)}</b>.</p>`;
+  const byMod = new Map();
+  results.forEach(r => { if (!byMod.has(r.module)) byMod.set(r.module, []); byMod.get(r.module).push(r); });
+  const sections = [...byMod.entries()].map(([dir, rs]) => {
+    const head = `<h3><span>${rs[0].emoji || "📚"}</span> ${esc(rs[0].moduleTitle)} <span class="c">${rs.length}</span></h3>`;
+    const pills = rs.map(r => {
+      const grp = r.group ? ` · ${esc(r.group)}` : "";
+      const title = `${esc(r.label)}${grp}`;
+      // Clipped so the type badge after it stays visible; the untruncated
+      // label is on the title attribute.
+      const short = r.label.length > 110 ? r.label.slice(0, 110).trimEnd() + "…" : r.label;
+      // Terms, Q&A and topics can be previewed in place, so they keep
+      // data-item and go through the existing overlay. A document has no
+      // preview endpoint, so it is a plain link into its module.
+      return r.type === "doc"
+        ? `<a class="pill" href="${r.href}" title="${title}">${esc(short)}<span class="k">${r.typeName}</span></a>`
+        : `<button class="pill" data-item data-dir="${dir}" data-type="${r.type}" data-id="${esc(r.id)}"
+             title="${title}">${esc(short)}<span class="k">${r.typeName}</span></button>`;
+    }).join("");
+    return `<section class="bmod">${head}<div class="btype"><div class="pills">${pills}</div></div></section>`;
+  }).join("");
+  return `<p class="no-results" style="text-align:left;padding:0 0 10px">` +
+         `${results.length} match${results.length === 1 ? "" : "es"} for <b>${esc(q)}</b>` +
+         `</p>${sections}`;
+}
+
+async function runFullTextSearch(q){
+  const el = document.getElementById("browse");
+  const mine = ++searchToken;
+  if (!q.trim()) { buildBrowse(); return; }
+  const S = window.__sysdsgSearch;
+  if (!S) { runSearch(q, el); return; }              // index unavailable: fall back to the title filter
+  if (!S.isReady()) el.innerHTML = `<p class="no-results">Searching&hellip;</p>`;
+  try {
+    const results = await S.query(q);
+    if (mine !== searchToken) return;                // a later keystroke won
+    el.innerHTML = searchResultsHTML(results, q.trim());
+  } catch (e) {
+    if (mine !== searchToken) return;
+    el.innerHTML = `<p class="no-results">Search is unavailable — ${esc(e.message)}</p>`;
+  }
+}
+
+let searchDebounce;
 mainSearch.addEventListener("input", e => {
-  if (e.target.value.trim() && currentView !== "browse") setView("browse");   // typing jumps to Browse
-  runSearch(e.target.value, document.getElementById("browse"));
+  const q = e.target.value;
+  if (q.trim() && currentView !== "browse") setView("browse");   // typing jumps to Browse
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => runFullTextSearch(q), 180);
 });
 
 /* ---- view toggle ---- */

@@ -12,6 +12,11 @@ copy. The tree, search, preview and practice logic are untouched.
 
 Run once. It refuses to run twice (it detects its own output).
 
+This records the one-time MIGRATION only. index.html is the source of truth
+from here on and has since gained features that were never in the original —
+cross-module full-text search among them — so re-running this against the old
+file reproduces the migrated page, not the page as it ships today.
+
 Usage:  python3 tools/build-hub.py [--file index.html]
 """
 import argparse

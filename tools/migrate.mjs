@@ -299,6 +299,7 @@ async function writeManifest(sheets, sheetId, hub, state) {
       ['root_folder_id', state.rootId ?? ''],
       ['hub_json_id',    state.hubJsonId ?? ''],
       ['hub_index_id',   state.hubIndexId ?? ''],
+      ['search_index_id', state.searchIndexId ?? ''],
       ['schema_version', '1'],
       ['migrated_at',    new Date().toISOString()],
     ],
