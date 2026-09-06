@@ -76,13 +76,18 @@ export async function flush() {
   Store._inFlight = (async () => {
     while (Store._dirty.size) {
       const kind = [...Store._dirty][0]
-      const data = Store._cache.get(kind) ?? {}
+      // Clear the flag BEFORE uploading, not after. An edit that lands while
+      // the upload is in flight re-adds it and the loop takes another pass;
+      // clearing afterwards would erase that flag and strand the edit in the
+      // cache, saved nowhere.
+      Store._dirty.delete(kind)
       try {
-        await writeModuleJson(Store.mod, FILE_OF[kind] ?? `${kind}.json`, data)
-        Store._dirty.delete(kind)
+        await writeModuleJson(Store.mod, FILE_OF[kind] ?? `${kind}.json`,
+                              Store._cache.get(kind) ?? {})
         emit('sysdsg:saved', { kind, pending: Store._dirty.size })
       } catch (e) {
-        // Keep it dirty and stop: a later edit, or the page-hide flush, retries.
+        // Put it back and stop; a later edit or the page-hide flush retries.
+        Store._dirty.add(kind)
         emit('sysdsg:error', { kind, message: e.message })
         break
       }
@@ -168,7 +173,8 @@ async function handleDocTags(payload) {
   const clean = Object.fromEntries(Object.entries(data).filter(([k]) => names.has(k)))
 
   Store._docs = null                       // re-derive tags on next read
-  Store._cache.set('doctags', clean)
+  // Written through rather than marked dirty: tag edits are rare, and a
+  // rename touches every entry, so it is worth persisting immediately.
   try {
     await writeModuleJson(Store.mod, 'docs.json', clean)
   } catch (e) {

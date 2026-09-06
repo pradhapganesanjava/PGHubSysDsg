@@ -62,13 +62,18 @@ export const DB = {
     'assets-map.json': { 'assets/a.svg': 'A1' },
   },
   writes: 0,
+  delay: 0,
 }
 export async function readModuleJson(mod, name, fallback = {}) {
   const v = DB.files[name]
   return v === undefined ? fallback : JSON.parse(JSON.stringify(v))
 }
 export async function writeModuleJson(mod, name, data) {
-  DB.writes++; DB.files[name] = JSON.parse(JSON.stringify(data)); return 'id'
+  DB.writes++
+  const snapshot = JSON.parse(JSON.stringify(data))
+  if (DB.delay) await new Promise(r => setTimeout(r, DB.delay))
+  DB.files[name] = snapshot
+  return 'id'
 }
 export async function moduleFolderId() { return 'MOD' }
 export async function ensureFolder(p, n) { return p + '/' + n }
@@ -141,6 +146,29 @@ await test('notes save under their id', async () => {
   await post('/notes', { id: 'a', html: '<p>hi</p>' })
   await flush()
   assert.equal(DB.files['notes.json'].a, '<p>hi</p>')
+})
+
+await test('an edit during an in-flight save is not stranded', async () => {
+  // The upload snapshots the data, so an edit that lands mid-flight is not in
+  // that snapshot. It must still be marked dirty afterwards, or it would sit
+  // in the cache having been saved nowhere.
+  DB.files['terms.json'] = {}
+  Store._cache.delete('terms')
+  await post('/terms', { id: 'first', title: 'First' })
+
+  DB.delay = 60
+  const inFlight = flush()                       // begins uploading {first}
+  await new Promise(r => setTimeout(r, 20))      // ...land an edit mid-upload
+  await post('/terms', { id: 'second', title: 'Second' })
+  await inFlight
+  DB.delay = 0
+
+  // The flush loop re-reads the dirty set each pass, so the re-added flag is
+  // drained before it returns. What matters is that the edit reached Drive:
+  // with the flag cleared after the upload instead of before, 'second' would
+  // have been dropped here and left sitting in the cache.
+  assert.deepEqual(Object.keys(DB.files['terms.json']).sort(), ['first', 'second'])
+  assert.equal(Store.pendingSaves, 0)
 })
 
 console.log('\n  docs\n')

@@ -6,7 +6,7 @@
  * after expiry must not lose the user's writing. Every call goes through
  * GAuth.fetch, which re-authorizes silently and retries once on a 401.
  */
-import { Config, LS, isEmailAllowed } from './config.js'
+import { Config, isEmailAllowed } from './config.js'
 
 const TOK_KEY = 'tok'
 const USR_KEY = 'usr'

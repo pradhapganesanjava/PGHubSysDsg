@@ -22,7 +22,7 @@ mkdir -p "$DEST/app" "$DEST/vendor" "$DEST/tools/lib" "$DEST/tools/test" \
          "$DEST/.github/workflows"
 
 cp "$SRC"/index.html "$SRC"/module.html "$SRC"/dev.py "$SRC"/README.md \
-   "$SRC"/.gitignore                                    "$DEST/"
+   "$SRC"/.gitignore "$SRC"/.nojekyll                   "$DEST/"
 cp "$SRC"/app/*.js                                      "$DEST/app/"
 cp "$SRC"/vendor/mermaid.min.js                         "$DEST/vendor/"
 cp "$SRC"/tools/*.mjs "$SRC"/tools/*.py "$SRC"/tools/*.sh \
