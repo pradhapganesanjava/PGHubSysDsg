@@ -58,7 +58,7 @@
 
   /* ===== Top header banner (title + tagline, two lines) ===== */
   #topbanner{flex:0 0 auto;background:var(--panel);border-bottom:1px solid var(--border);
-    padding:8px 18px;display:flex;align-items:baseline;justify-content:center;gap:9px;white-space:nowrap;overflow:hidden}
+    padding:8px 18px;display:flex;align-items:center;justify-content:center;gap:9px;white-space:nowrap;overflow:hidden}
   #topbanner .tb-title{font-size:1.02rem;font-weight:700;letter-spacing:-0.01em;flex:0 0 auto}
   #topbanner .tb-sep{color:var(--muted);flex:0 0 auto}
   #topbanner .tb-tagline{color:var(--muted);font-size:.82rem;margin:0;flex:0 1 auto;min-width:0;
@@ -128,21 +128,36 @@
   body:not(.nav-on) #sb-resize{display:none}
   #content{flex:1;min-width:0;height:100%;overflow-y:auto;
     background:radial-gradient(1200px 620px at 50% -12%, var(--panel-2) 0%, var(--bg) 62%)}
-  .wrap{max-width:1080px;margin:0 auto;padding:36px 26px 90px}
-  .topbar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .wrap{max-width:1080px;margin:0 auto;padding:18px 26px 90px}
+  /* One compact row under the header. It used to be three stacked blocks —
+     the nav toggle, then the search box, then view + theme + status — which on
+     a narrow window wrapped into five separate lines before any content
+     appeared. */
+  .toolbar{display:flex;align-items:center;gap:10px;margin:0 0 20px;flex-wrap:wrap}
+  /* min-width:0 because a flex item defaults to min-width:auto, which for a
+     text input is its intrinsic width — so without this the box refuses to
+     shrink and pushes the status onto a line of its own. */
+  /* min-width:0 because a flex item defaults to min-width:auto, which for a
+     text input is its intrinsic width — without it the box refuses to shrink.
+     The 180px basis is what keeps everything on one line at 768px: the other
+     five children plus gaps need 497px of a 716px row, and a 220px basis
+     overshot that by a single pixel, which was enough to wrap the status onto
+     a line of its own. It still grows to fill on a wide window. */
+  .toolbar .search-wrap{flex:1 1 180px;min-width:0;max-width:none}
+  .toolbar .status{margin-left:auto;white-space:nowrap}
   .iconbtn{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
     width:38px;height:38px;border-radius:9px;font-size:1.05rem;cursor:pointer;flex:0 0 auto}
+  .iconbtn.sm{width:34px;height:34px;font-size:.92rem}
+  .iconbtn:hover{border-color:var(--accent)}
   .iconbtn:hover{border-color:var(--accent)}
   .hero{text-align:center;margin:10px 0 2px}
   .hero h1{font-size:clamp(1.8rem,4.5vw,2.8rem);margin:0 0 10px;letter-spacing:-0.02em}
   .hero p{color:var(--muted);font-size:1.02rem;max-width:64ch;margin:0 auto}
-  .searchrow{display:flex;justify-content:center;margin:22px 0 6px}
   .search-wrap{position:relative;width:100%;max-width:560px}
   #mainSearch{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);
     border-radius:11px;padding:12px 14px 12px 40px;font-size:.95rem;font-family:inherit}
   #mainSearch:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .search-wrap .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)}
-  .bar{display:flex;align-items:center;justify-content:center;gap:10px;margin:12px 0 6px;flex-wrap:wrap}
   .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;overflow:hidden}
   .seg button{background:transparent;border:0;color:var(--muted);padding:7px 13px;font-size:.85rem;
     cursor:pointer;font-family:inherit}
@@ -150,9 +165,16 @@
   .mini{background:var(--panel-2);border:1px solid var(--border);color:var(--muted);
     padding:7px 13px;border-radius:8px;font-size:.85rem;cursor:pointer;font-family:inherit}
   .mini:hover{color:var(--text);border-color:var(--accent)}
-  .theme-select{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
-    padding:7px 12px;border-radius:8px;font-size:.85rem;font-family:inherit;cursor:pointer}
-  .theme-select:focus{border-color:var(--accent);outline:none}
+  /* Theme picker: one dot per theme, painted in that theme's own background
+     and accent, with the name on hover. The labelled <select> it replaces was
+     the widest control in the row and pushed everything else onto a new line. */
+  .tb-themes{display:flex;align-items:center;gap:5px;flex:0 0 auto;margin-left:10px}
+  .tb-swatch{width:17px;height:17px;padding:0;border-radius:50%;cursor:pointer;
+    border:1px solid var(--border);position:relative;background:var(--sw-bg)}
+  .tb-swatch::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--sw-accent)}
+  .tb-swatch:hover{transform:scale(1.15)}
+  .tb-swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--accent)}
+  .tb-swatch:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   .status{font-size:.82rem;color:var(--muted)}
   .cat{margin-top:34px}
   .cat-head{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--border);
@@ -246,6 +268,21 @@
   .modal-foot a:hover{border-color:var(--accent)}
 
   .scrim{display:none}
+  .seg button .i{margin-right:5px}
+
+  /* Phones: the row still needs two lines, but only two. The view switcher
+     drops to its icons — the label is on hover and in aria-label — which is
+     what lets the refresh button and the status join it rather than claim a
+     third line. The tagline goes with them; a lone separator dot is not worth
+     a header slot. */
+  @media(max-width:560px){
+    #topbanner .tb-sep,#topbanner .tb-tagline{display:none}
+    .seg button .l{display:none}
+    .seg button .i{margin-right:0}
+    .seg button{padding:7px 12px;font-size:1rem}
+    .toolbar{gap:8px}
+  }
+
   @media(max-width:860px){
     #sidebar{position:fixed;z-index:60;box-shadow:0 0 40px rgba(0,0,0,.5)}
     #sb-resize{display:none}
@@ -328,6 +365,7 @@
   <span class="tb-title">🧭 System Design Hub</span>
   <span class="tb-sep">·</span>
   <span class="tb-tagline" id="tagline">Everything about system design — foundations, patterns, distributed systems, backend, trade-offs, worked designs — one launcher, each module its own app.</span>
+  <div class="tb-themes" id="themeSwatches" role="group" aria-label="Theme"></div>
 </header>
 <div id="appbody">
 <aside id="sidebar">
@@ -356,33 +394,18 @@
 
 <div id="content">
   <main class="wrap">
-    <div class="topbar">
+    <div class="toolbar">
       <button class="iconbtn" id="navToggle" title="Show / hide contents" aria-label="Toggle contents">☰</button>
-    </div>
-
-    <div class="searchrow">
       <div class="search-wrap">
         <span class="mag">🔎</span>
         <input id="mainSearch" type="search" placeholder="Search everything — terms, Q&amp;A, topics, documents…" autocomplete="off">
       </div>
-    </div>
-
-    <div class="bar">
       <div class="seg" id="viewSeg">
-        <button data-view="modules" class="active">🧩 Modules</button>
-        <button data-view="browse">📇 Browse all</button>
-        <button data-view="practice">🎯 Practice</button>
+        <button data-view="modules" class="active" title="Modules"><span class="i">🧩</span><span class="l">Modules</span></button>
+        <button data-view="browse" title="Browse all"><span class="i">📇</span><span class="l">Browse all</span></button>
+        <button data-view="practice" title="Practice"><span class="i">🎯</span><span class="l">Practice</span></button>
       </div>
-      <select id="theme" class="theme-select" aria-label="Theme">
-        <option value="dark">🌙 Dark</option>
-        <option value="moonlight">🌌 Moonlight</option>
-        <option value="gray">🌫️ Gray</option>
-        <option value="soft">🪶 Soft</option>
-        <option value="white">☀️ White</option>
-        <option value="colorful">🎨 Colorful</option>
-        <option value="cartoon">🦄 Cartoon</option>
-      </select>
-      <button class="mini" id="refresh">🔄 Re-check</button>
+      <button class="iconbtn sm" id="refresh" title="Re-check modules" aria-label="Re-check modules">🔄</button>
       <span class="status" id="status">loading…</span>
     </div>
 
@@ -447,13 +470,36 @@
 /* ---- shared theme + hub cookie (cookies ignore port, so all modules share them) ---- */
 function _setCookie(k, v){ try { document.cookie = k + "=" + encodeURIComponent(v) + ";path=/;max-age=31536000;SameSite=Lax"; } catch(e){} }
 function _getCookie(k){ var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + k + "=([^;]+)")); return m ? decodeURIComponent(m[1]) : null; }
-const themeSel = document.getElementById("theme");
+/* Each theme gets a dot painted in its own background and accent, named on
+   hover. Colours are duplicated from the [data-theme] blocks above because a
+   swatch has to show a theme that is not currently applied, so the live custom
+   properties cannot be read for it. */
+const THEMES = [
+  { id:"dark",      label:"Dark",      bg:"#0f1117", accent:"#6ea8fe" },
+  { id:"moonlight", label:"Moonlight", bg:"#0b1023", accent:"#8b9dff" },
+  { id:"gray",      label:"Gray",      bg:"#2b2f36", accent:"#9fb0c0" },
+  { id:"soft",      label:"Soft",      bg:"#f6f4f1", accent:"#9d8ec2" },
+  { id:"white",     label:"White",     bg:"#ffffff", accent:"#2563eb" },
+  { id:"colorful",  label:"Colorful",  bg:"#fef6ff", accent:"#e0179d" },
+  { id:"cartoon",   label:"Cartoon",   bg:"#fffbe7", accent:"#ff5c8a" },
+];
+const themeSwatches = document.getElementById("themeSwatches");
+themeSwatches.innerHTML = THEMES.map(t =>
+  `<button type="button" class="tb-swatch" data-theme="${t.id}" aria-pressed="false"` +
+  ` title="${t.label} theme" aria-label="${t.label} theme"` +
+  ` style="--sw-bg:${t.bg};--sw-accent:${t.accent}"></button>`).join("");
+
 function applyTheme(name){
+  if (!THEMES.some(t => t.id === name)) name = "dark";
   document.documentElement.setAttribute("data-theme", name);
-  themeSel.value = name;
+  themeSwatches.querySelectorAll(".tb-swatch").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.theme === name)));
   _setCookie("sysdsg_theme", name);
 }
-themeSel.addEventListener("change", () => applyTheme(themeSel.value));
+themeSwatches.addEventListener("click", e => {
+  const b = e.target.closest(".tb-swatch");
+  if (b) applyTheme(b.dataset.theme);
+});
 applyTheme(_getCookie("sysdsg_theme") || "dark");
 document.addEventListener("visibilitychange", function(){
   if (document.hidden) return;
@@ -760,7 +806,9 @@ function setView(v){
   pv.style.display = isPractice ? "" : "none";
   pv.hidden = !isPractice;
   document.getElementById("hubFootnote").style.display = isPractice ? "none" : "";
-  document.querySelector(".searchrow").style.display = isPractice ? "none" : "";
+  // Practice has nothing to search, so the box goes; the rest of the row (view
+  // switcher, status) stays, since that is how you leave Practice again.
+  document.querySelector(".toolbar .search-wrap").style.display = isPractice ? "none" : "";
   document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
   if (isPractice) startPractice();
 }
