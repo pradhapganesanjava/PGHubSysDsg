@@ -5,6 +5,7 @@
  * lives in Drive with everything else, so even the module titles and taglines
  * stay out of the public repository.
  */
+import { mountThemePicker } from './theme-picker.js'
 import * as Settings from './settings.js'
 import { installStore, flush } from './store.js'
 import { installMedia }        from './media.js'
@@ -39,3 +40,4 @@ ready.then(async () => {
 window.__sysdsgSettings = Settings
 Settings.onThemeChange(t => Settings.withRemote(() => window.applyTheme?.(t)))
 Settings.syncFromDrive().catch(() => { /* the local theme stands */ })
+mountThemePicker(document.getElementById('themeSwatches'))

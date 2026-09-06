@@ -143,12 +143,8 @@
 
   /* Theme picker */
   .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-  .theme-select {
-    background: var(--panel-2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 7px 10px; font-size: 13px; font-weight: 600; cursor: pointer; outline: none;
-  }
-  .theme-select:focus { border-color: var(--accent); }
+  /* Mount point for app/theme-picker.js, which brings its own styles. */
+  .theme-select { display: flex; align-items: center; flex: 0 0 auto; }
 
 
   /* ===== Narrow screens =====
@@ -174,9 +170,7 @@
        otherwise the five tabs share ~260px with the picker and the last two are
        cut off, reachable only by a horizontal swipe nobody would guess at. */
     .header-right { display: contents; }
-    /* Compact enough to share the title row: at its desktop size the picker
-       overshoots the first row by a few pixels and wraps to one of its own. */
-    .theme-select { margin-left: auto; flex: 0 0 auto; padding: 5px 6px; font-size: 12px; }
+    .theme-select { margin-left: auto; flex: 0 0 auto; }
     /* order pulls the tabs after the picker so the header settles into two rows
        (title + picker, then tabs) rather than three. Without it the full-width
        tabs break the line first and the picker is stranded on a row of its own. */
@@ -689,15 +683,7 @@
         <button class="tab-btn" data-tab="docs">Docs</button>
         <button class="tab-btn" data-tab="search">Search</button>
       </div>
-      <select id="theme" class="theme-select" aria-label="Theme">
-        <option value="dark">🌙 Dark</option>
-        <option value="moonlight">🌌 Moonlight</option>
-        <option value="gray">🌫️ Gray</option>
-        <option value="soft">🪶 Soft</option>
-        <option value="white">☀️ White</option>
-        <option value="colorful">🎨 Colorful</option>
-        <option value="cartoon">🦄 Cartoon</option>
-      </select>
+      <div class="theme-select" id="themeSwatches"></div>
     </div>
   </header>
 
@@ -2085,12 +2071,10 @@ function wrapInlineCode(editor) {
 
 /* ---- Theme picker (shared across ALL SysDsg modules via a host cookie) ----
    The theme is shared with the hub landing page, which is same-origin. */
-const themeSel = document.getElementById("theme");
 function _setCookie(k, v){ try { document.cookie = k + "=" + encodeURIComponent(v) + ";path=/;max-age=31536000;SameSite=Lax"; } catch(e){} }
 function _getCookie(k){ var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + k + "=([^;]+)")); return m ? decodeURIComponent(m[1]) : null; }
 function applyTheme(name) {
   document.documentElement.setAttribute("data-theme", name);
-  if (themeSel) themeSel.value = name;
   _setCookie("sysdsg_theme", name);
   try { localStorage.setItem("agentai-theme", name); } catch (e) {}
   // Broadcasts to other open pages and mirrors to Drive, once the modules that
@@ -2098,7 +2082,6 @@ function applyTheme(name) {
   window.__sysdsgSettings?.setTheme(name);
   if (typeof rerenderCurrentDoc === "function") rerenderCurrentDoc();
 }
-if (themeSel) themeSel.addEventListener("change", () => applyTheme(themeSel.value));
 let savedTheme = _getCookie("sysdsg_theme");
 if (!savedTheme) { try { savedTheme = localStorage.getItem("agentai-theme"); } catch (e) {} }
 applyTheme(savedTheme || "dark");

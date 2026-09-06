@@ -24,8 +24,11 @@ const line = (ok, msg) => '   ' + (ok ? '<span class="ok">PASS</span>' : '<span 
 
   L.push('<h2>1. the hub picks Soft</h2>');
   const hub = await load('index.html');
-  const sw = hub.contentDocument.querySelector('.tb-swatch[data-theme="soft"]');
-  if (sw) sw.click();
+  const hubCur = hub.contentDocument.querySelector('#themeSwatches .tp-cur');
+  if (hubCur) hubCur.click(); else L.push('   <span class="bad">hub has no theme control</span>');
+  await new Promise(r => setTimeout(r, 150));
+  const hubOpt = hub.contentDocument.querySelector('#themeSwatches .tp-opt[data-theme="soft"]');
+  if (hubOpt) hubOpt.click(); else L.push('   <span class="bad">no Soft option in the hub picker</span>');
   await new Promise(r => setTimeout(r, 500));
   L.push(line(themeOf(hub) === 'soft', 'hub is ' + themeOf(hub) + ', cookie ' + cookie()));
 
@@ -34,13 +37,21 @@ const line = (ok, msg) => '   ' + (ok ? '<span class="ok">PASS</span>' : '<span 
   L.push(line(themeOf(mod) === 'soft', 'module is ' + themeOf(mod)));
 
   L.push('<h2>3. the module switches to Moonlight</h2>');
-  const sel = mod.contentDocument.getElementById('theme');
-  if (sel) { sel.value = 'moonlight'; sel.dispatchEvent(new mod.contentWindow.Event('change')); }
+  // Drive the picker the way a person does: open it, then click Moonlight.
+  const cur = mod.contentDocument.querySelector('#themeSwatches .tp-cur');
+  if (cur) cur.click();
+  await new Promise(r => setTimeout(r, 150));
+  const opt = mod.contentDocument.querySelector('#themeSwatches .tp-opt[data-theme="moonlight"]');
+  if (opt) opt.click(); else L.push('   <span class="bad">no Moonlight option in the module picker</span>');
   await new Promise(r => setTimeout(r, 700));
   L.push(line(themeOf(mod) === 'moonlight', 'module is ' + themeOf(mod) + ', cookie ' + cookie()));
 
   L.push('<h2>4. the already-open hub follows, with no reload</h2>');
   L.push(line(themeOf(hub) === 'moonlight', 'hub is ' + themeOf(hub)));
+
+  L.push('<h2>4b. the menu closes after choosing</h2>');
+  const openState = mod.contentDocument.querySelector('#themeSwatches')?.dataset.open;
+  L.push(line(openState === '0', 'module picker data-open = ' + openState));
 
   L.push('<h2>5. it reached the Drive settings file</h2>');
   // The Drive write is debounced, so give it longer than the debounce window.

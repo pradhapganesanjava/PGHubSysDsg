@@ -166,6 +166,10 @@ await writeFile(join(OUT, 'frame.html'), `<!doctype html><meta charset="utf-8"><
     if (p.get('theme')) localStorage.setItem('agentai-theme', p.get('theme'));
   } catch {}
   f.src = p.get('t') || 'index.html';
+  // Lets a screenshot capture the theme menu, which otherwise needs a click.
+  if (p.get('picker')) f.addEventListener('load', () => setTimeout(() => {
+    f.contentDocument?.querySelector('#themeSwatches .tp-cur')?.click();
+  }, 1200));
   const q = p.get('q');
   if (q) f.addEventListener('load', () => setTimeout(() => {
     const d = f.contentDocument, box = d && d.getElementById('mainSearch');

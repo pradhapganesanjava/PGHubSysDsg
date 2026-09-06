@@ -57,8 +57,13 @@
   a{color:inherit;text-decoration:none}
 
   /* ===== Top header banner (title + tagline, two lines) ===== */
+  /* No overflow:hidden here: the theme menu is absolutely positioned inside
+     this banner and hangs below it, and clipping the banner clipped the menu.
+     The tagline, the only thing that needed clipping, already ellipsises
+     itself. */
   #topbanner{flex:0 0 auto;background:var(--panel);border-bottom:1px solid var(--border);
-    padding:8px 18px;display:flex;align-items:center;justify-content:center;gap:9px;white-space:nowrap;overflow:hidden}
+    padding:8px 18px;display:flex;align-items:center;justify-content:center;gap:9px;white-space:nowrap;
+    position:relative;z-index:50}
   #topbanner .tb-title{font-size:1.02rem;font-weight:700;letter-spacing:-0.01em;flex:0 0 auto}
   #topbanner .tb-sep{color:var(--muted);flex:0 0 auto}
   #topbanner .tb-tagline{color:var(--muted);font-size:.82rem;margin:0;flex:0 1 auto;min-width:0;
@@ -165,16 +170,9 @@
   .mini{background:var(--panel-2);border:1px solid var(--border);color:var(--muted);
     padding:7px 13px;border-radius:8px;font-size:.85rem;cursor:pointer;font-family:inherit}
   .mini:hover{color:var(--text);border-color:var(--accent)}
-  /* Theme picker: one dot per theme, painted in that theme's own background
-     and accent, with the name on hover. The labelled <select> it replaces was
-     the widest control in the row and pushed everything else onto a new line. */
-  .tb-themes{display:flex;align-items:center;gap:5px;flex:0 0 auto;margin-left:10px}
-  .tb-swatch{width:17px;height:17px;padding:0;border-radius:50%;cursor:pointer;
-    border:1px solid var(--border);position:relative;background:var(--sw-bg)}
-  .tb-swatch::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--sw-accent)}
-  .tb-swatch:hover{transform:scale(1.15)}
-  .tb-swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--accent)}
-  .tb-swatch:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  /* The picker brings its own styles (app/theme-picker.js); it only needs a
+     place to sit at the end of the banner. */
+  .tb-themes{display:flex;align-items:center;flex:0 0 auto;margin-left:10px}
   .status{font-size:.82rem;color:var(--muted)}
   .cat{margin-top:34px}
   .cat-head{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--border);
@@ -470,39 +468,17 @@
 /* ---- shared theme + hub cookie (cookies ignore port, so all modules share them) ---- */
 function _setCookie(k, v){ try { document.cookie = k + "=" + encodeURIComponent(v) + ";path=/;max-age=31536000;SameSite=Lax"; } catch(e){} }
 function _getCookie(k){ var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + k + "=([^;]+)")); return m ? decodeURIComponent(m[1]) : null; }
-/* Each theme gets a dot painted in its own background and accent, named on
-   hover. Colours are duplicated from the [data-theme] blocks above because a
-   swatch has to show a theme that is not currently applied, so the live custom
-   properties cannot be read for it. */
-const THEMES = [
-  { id:"dark",      label:"Dark",      bg:"#0f1117", accent:"#6ea8fe" },
-  { id:"moonlight", label:"Moonlight", bg:"#0b1023", accent:"#8b9dff" },
-  { id:"gray",      label:"Gray",      bg:"#2b2f36", accent:"#9fb0c0" },
-  { id:"soft",      label:"Soft",      bg:"#f6f4f1", accent:"#9d8ec2" },
-  { id:"white",     label:"White",     bg:"#ffffff", accent:"#2563eb" },
-  { id:"colorful",  label:"Colorful",  bg:"#fef6ff", accent:"#e0179d" },
-  { id:"cartoon",   label:"Cartoon",   bg:"#fffbe7", accent:"#ff5c8a" },
-];
-const themeSwatches = document.getElementById("themeSwatches");
-themeSwatches.innerHTML = THEMES.map(t =>
-  `<button type="button" class="tb-swatch" data-theme="${t.id}" aria-pressed="false"` +
-  ` title="${t.label} theme" aria-label="${t.label} theme"` +
-  ` style="--sw-bg:${t.bg};--sw-accent:${t.accent}"></button>`).join("");
-
+/* The control itself is app/theme-picker.js, shared with the module pages and
+   mounted by hub-boot.js. This only has to apply and persist a choice. */
+const THEME_IDS = ["dark","moonlight","gray","soft","white","colorful","cartoon"];
 function applyTheme(name){
-  if (!THEMES.some(t => t.id === name)) name = "dark";
+  if (!THEME_IDS.includes(name)) name = "dark";
   document.documentElement.setAttribute("data-theme", name);
-  themeSwatches.querySelectorAll(".tb-swatch").forEach(b =>
-    b.setAttribute("aria-pressed", String(b.dataset.theme === name)));
   _setCookie("sysdsg_theme", name);
   // Broadcasts to other open pages and mirrors to Drive, once the modules that
   // provide it have loaded. The cookie above is the fast path and stands alone.
   window.__sysdsgSettings?.setTheme(name);
 }
-themeSwatches.addEventListener("click", e => {
-  const b = e.target.closest(".tb-swatch");
-  if (b) applyTheme(b.dataset.theme);
-});
 applyTheme(_getCookie("sysdsg_theme") || "dark");
 document.addEventListener("visibilitychange", function(){
   if (document.hidden) return;

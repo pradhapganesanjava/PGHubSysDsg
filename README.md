@@ -195,6 +195,12 @@ read on load so they render, and their title comes from the first `# heading`.
 The theme is chosen once and holds everywhere — the hub, all thirteen modules,
 other open tabs, and other machines.
 
+The control is one dot showing the theme in use, with a caret; the rest appear
+only when asked for, which suits how rarely it is touched. The colours are the
+label, so there is no text — each option names itself on hover. It lives in
+`app/theme-picker.js` and is mounted into both the hub banner and every module
+header, so there is one implementation rather than one per page.
+
 Three layers, in order of how quickly they apply:
 
 | Where | Scope | Why |
