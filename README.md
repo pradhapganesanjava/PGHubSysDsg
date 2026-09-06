@@ -190,6 +190,26 @@ read on load so they render, and their title comes from the first `# heading`.
 
 ---
 
+## Checking the layout on a phone
+
+Both pages are behind a Google sign-in and read from a private Drive folder, so
+they cannot simply be screenshotted. `tools/mobile/` builds an offline copy that
+substitutes only the sign-in gate and the Drive layer — real HTML, real CSS,
+real rendering code — and shoots it through a fixed-width frame with headless
+Chrome:
+
+```bash
+node tools/mobile/build-harness.mjs
+bash tools/mobile/shoot.sh mine        # → tools/mobile/shots/
+```
+
+`diag.html` in the harness reports horizontal overflow and names the outermost
+offending elements, which is how the module page's 365px overflow was traced to
+a non-wrapping header cluster and a fixed-width sidebar. Both the harness and
+the screenshots are gitignored build output.
+
+---
+
 ## Before making the repository public
 
 ```bash

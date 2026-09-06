@@ -150,6 +150,59 @@
   }
   .theme-select:focus { border-color: var(--accent); }
 
+
+  /* ===== Narrow screens =====
+     The desktop layout is a fixed 300px sidebar beside a flexible main. On a
+     390px phone that left main at 96px, and the header's right-hand cluster
+     (five tabs plus the theme picker) is 488px and would not wrap, so the
+     document came out 365px wider than the screen and scrolled sideways.
+
+     Below 860px — the same breakpoint the hub uses — the sidebar stacks above
+     the content at full width instead of competing with it, and the header
+     wraps its controls onto a second row. Stacking rather than overlaying is
+     deliberate: an overlay anchored at top:0 would cover the very button that
+     closes it, and anchoring below a header whose height changes when it wraps
+     is fragile. */
+  @media (max-width: 860px) {
+    header { flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
+    header h1 { font-size: 1.05rem; }
+    header .sub { display: none; }          /* the module subtitle is on the hub card too */
+
+    /* display:contents dissolves the wrapper so its two children become direct
+       flex items of the header. That is what lets the theme picker sit at the
+       end of the title row while the tabs claim a full-width row of their own —
+       otherwise the five tabs share ~260px with the picker and the last two are
+       cut off, reachable only by a horizontal swipe nobody would guess at. */
+    .header-right { display: contents; }
+    /* Compact enough to share the title row: at its desktop size the picker
+       overshoots the first row by a few pixels and wraps to one of its own. */
+    .theme-select { margin-left: auto; flex: 0 0 auto; padding: 5px 6px; font-size: 12px; }
+    /* order pulls the tabs after the picker so the header settles into two rows
+       (title + picker, then tabs) rather than three. Without it the full-width
+       tabs break the line first and the picker is stranded on a row of its own. */
+    .tabs { order: 1; flex: 0 0 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs .tab-btn { flex: 1 1 0; min-width: 0; }
+
+    .layout { flex-direction: column; }
+    .layout > aside:not(#drawer) {
+      width: 100%; min-width: 0; max-height: 45vh;
+      border-right: 0; border-bottom: 1px solid var(--border);
+    }
+
+    main { padding: 20px 16px 64px; min-width: 0; }
+    .detail, .detail:has(.pdf-view), .sv-head, #search-results, #search-more, .sr-empty { max-width: 100%; }
+    .pdf-frame { height: 70vh; }
+    .boxes { grid-template-columns: 1fr; }
+    .ov-globe { height: 60vh; }
+  }
+
+  /* main must be allowed to shrink inside the flex layout at any width, or a
+     wide child (a table, a diagram, a code block) pushes the page sideways
+     instead of scrolling inside its own box. */
+  main { min-width: 0; }
+  .markdown-body pre, .markdown-body table { max-width: 100%; overflow-x: auto; }
+
   .layout { display: flex; flex: 1; min-height: 0; }
   .nav-toggle { height: 34px; }
   .layout.nav-closed > aside:not(#drawer) { display: none; }
@@ -1366,6 +1419,16 @@ function showTab(tab) {
 document.querySelectorAll(".tab-btn").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
 
 /* hamburger toggles the left navigation on/off (remembered) */
+/* On a narrow screen the sidebar sits above the content, so leaving it open
+   after a selection buries the thing just selected. Collapse it — without
+   saving that as a preference, since it is a consequence of the layout rather
+   than something the user asked for. */
+nav.addEventListener("click", e => {
+  if (!e.target.closest(".term")) return;
+  if (!window.matchMedia("(max-width: 860px)").matches) return;
+  layout.classList.add("nav-closed");
+});
+
 document.getElementById("nav-toggle").addEventListener("click", () => {
   const closed = layout.classList.toggle("nav-closed");
   savePref("agentai-nav-open", closed ? "0" : "1");
@@ -3044,7 +3107,12 @@ async function boot() {
   rebuildTopicData();
   initFolder();
   // restore sidebar open/closed + tree/flat view
-  if (loadPref("agentai-nav-open", "1") === "0") layout.classList.add("nav-closed");
+  // Stacked above the content on a phone, an open sidebar would push the
+  // detail off-screen on arrival, so it starts closed there — but only when
+  // the user has expressed no preference of their own.
+  const navPref = loadPref("agentai-nav-open", "");
+  const narrow  = window.matchMedia("(max-width: 860px)").matches;
+  if (navPref === "0" || (navPref === "" && narrow)) layout.classList.add("nav-closed");
   const savedView = loadPref("agentai-nav-view", "tree");
   btnTree.classList.toggle("active", savedView === "tree");
   btnFlat.classList.toggle("active", savedView !== "tree");

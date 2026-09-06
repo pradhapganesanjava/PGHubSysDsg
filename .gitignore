@@ -39,6 +39,11 @@ hub.json
 tools/.migration-state.json
 tools/out/
 
+# Layout-harness build output (a stubbed copy of the site, plus screenshots).
+# Regenerate with tools/mobile/build-harness.mjs — never commit it.
+tools/mobile/harness/
+tools/mobile/shots/
+
 # ── Housekeeping ─────────────────────────────────────────────────────────────
 .DS_Store
 __pycache__/
