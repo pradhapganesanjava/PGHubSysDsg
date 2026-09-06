@@ -22,12 +22,32 @@ async function test(name, fn) {
 
 // ── environment shims ────────────────────────────────────────────────────────
 const listeners = {}
+const upstream = async () => new Response('upstream', { status: 200 })
 globalThis.window = {
-  fetch: async () => new Response('upstream', { status: 200 }),
+  fetch: upstream,
   addEventListener: (k, f) => (listeners[k] ??= []).push(f),
   dispatchEvent: ev => (listeners[ev.type] ?? []).forEach(f => f(ev)),
   location: { href: 'http://localhost/module.html', origin: 'http://localhost' },
 }
+
+// Reproduce the page's queueing shim (see tools/build-app.py) before the store
+// is imported, because that ordering is the whole point: the shim replaces
+// window.fetch first, so a store that captures window.fetch for passthrough
+// captures the shim and recurses into itself. Without this the suite tests a
+// world the browser never runs.
+;(function () {
+  const native = window.fetch.bind(window)
+  window.__sysdsgNativeFetch = native
+  let parked = []
+  let handler = null
+  window.__sysdsgInstall = fn => { handler = fn; parked.splice(0).forEach(f => f()) }
+  window.fetch = (input, init) => {
+    if (handler) return handler(input, init)
+    return new Promise((res, rej) => {
+      parked.push(() => (handler || native)(input, init).then(res, rej))
+    })
+  }
+})()
 // store.js reads the bare global `location`, as browser code does.
 globalThis.location = window.location
 globalThis.document = { visibilityState: 'visible' }
@@ -117,7 +137,16 @@ await test('unknown paths pass through untouched', async () => {
 })
 
 await test('cross-origin requests pass through untouched', async () => {
+  // Regression: passthrough used to re-enter the handler, because the store
+  // captured window.fetch after the shim had already replaced it. The first
+  // cross-origin call after sign-in — fetching the user's profile — recursed
+  // until the stack blew, and nothing before sign-in ever reached this path.
   assert.equal(await (await F('https://example.com/x')).text(), 'upstream')
+})
+
+await test('the store registers through the page shim, not by patching fetch', () => {
+  assert.equal(typeof window.__sysdsgNativeFetch, 'function',
+    'the shim must publish the real fetch for passthrough to use')
 })
 
 await test('POST /terms adds an item and it reads back', async () => {

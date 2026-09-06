@@ -14,7 +14,10 @@
 import { readRootJson, readModuleJson } from './drive.js'
 import { ready } from './ready.js'
 
-const nativeFetch = window.fetch.bind(window)
+// The page's shim stashed the real fetch before replacing window.fetch.
+// Binding window.fetch here would capture the shim instead and make
+// passthrough recurse into this handler until the stack blows.
+const nativeFetch = window.__sysdsgNativeFetch ?? window.fetch.bind(window)
 
 const FILE_OF = { terms: 'terms.json', qa: 'qa.json', topics: 'topics.json' }
 

@@ -44,6 +44,12 @@ FETCH_SHIM = '''<script>
  */
 (function () {
   var native = window.fetch.bind(window);
+  // Published so the store can pass non-app requests straight to the browser.
+  // It cannot capture window.fetch itself: by the time its module is imported
+  // this shim has already replaced it, so what it would capture is the shim —
+  // and passthrough would call back into the handler forever. The first
+  // cross-origin request after sign-in blew the stack exactly that way.
+  window.__sysdsgNativeFetch = native;
   var parked = [];
   var handler = null;
   window.__sysdsgInstall = function (fn) {
@@ -93,6 +99,30 @@ def build(base_dir, out_path):
          'if (hb) hb.href = "./";'),
         (re.compile(r'   Cookies ignore port, so 127\.0\.0\.1:\d+\.\.\d+ \+ the hub all share one theme\. \*/'),
          '   The theme is shared with the hub landing page, which is same-origin. */'),
+
+        # Copy that still described the local Python server the app no
+        # longer talks to — including a hint sitting under the note editor
+        # and an alert users would actually see.
+        (re.compile(r'      : "Docs load via the local server\\. Run <code>python3 server\\.py</code>\\.";'),
+         '      : "Docs live in Google Drive — sign in to load them.";'),
+        (re.compile(r'    label = "Pasted images are saved as files in the <b>images/</b> folder via the local server\\.";'),
+         '    label = "Pasted images are uploaded to the module\'s <b>images/</b> folder in Google Drive.";'),
+        (re.compile(r'    alert\("Could not save the tag — is the local server running\?\\n" \+ e\);'),
+         '    alert("Could not save the tag to Google Drive.\\n" + e);'),
+
+        # The Docs tab latched `docsLoaded` before its request, so a single
+        # failed load left it permanently claiming the folder was empty. With
+        # the data coming over the network now rather than off localhost, a
+        # transient failure is a real possibility, so only latch on success.
+        (re.compile(
+            r'  if \(docsLoaded\) return DOCS;\n  docsLoaded = true;\n'
+            r'  if \(SERVER\) \{\n    try \{\n      const r = await fetch\("/docs"\);\n'
+            r'      if \(r\.ok\) DOCS = await r\.json\(\);\n'
+            r'    \} catch \(e\) \{ DOCS = \[\]; \}\n  \}'),
+         '  if (docsLoaded) return DOCS;\n'
+         '  if (SERVER) {\n    try {\n      const r = await fetch("/docs");\n'
+         '      if (r.ok) { DOCS = await r.json(); docsLoaded = true; }\n'
+         '    } catch (e) { DOCS = []; }\n  } else {\n    docsLoaded = true;\n  }'),
 
         # Stale offline message: there is no local server to run any more.
         (re.compile(

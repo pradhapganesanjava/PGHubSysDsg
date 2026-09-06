@@ -35,6 +35,11 @@ export function loadGIS() {
   })
 }
 
+// Auth traffic goes straight to the browser: it is cross-origin, the store
+// would only pass it through anyway, and routing it through the app handler
+// during startup is how the recursion above bites.
+const rawFetch = (...a) => (window.__sysdsgNativeFetch ?? window.fetch)(...a)
+
 export const GAuth = {
   _token: null,
   _user:  null,
@@ -91,7 +96,7 @@ export const GAuth = {
           } catch {}
 
           try {
-            const r = await fetch('https://www.googleapis.com/oauth2/v1/userinfo', {
+            const r = await rawFetch('https://www.googleapis.com/oauth2/v1/userinfo', {
               headers: { Authorization: `Bearer ${this._token}` },
             })
             this._user = await r.json()

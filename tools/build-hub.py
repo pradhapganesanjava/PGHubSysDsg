@@ -26,6 +26,12 @@ SHIM = '''<script>
    See the same shim in module.html. */
 (function () {
   var native = window.fetch.bind(window);
+  // Published so the store can pass non-app requests straight to the browser.
+  // It cannot capture window.fetch itself: by the time its module is imported
+  // this shim has already replaced it, so what it would capture is the shim —
+  // and passthrough would call back into the handler forever. The first
+  // cross-origin request after sign-in blew the stack exactly that way.
+  window.__sysdsgNativeFetch = native;
   var parked = [];
   var handler = null;
   window.__sysdsgInstall = function (fn) {

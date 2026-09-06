@@ -73,6 +73,24 @@ async function htmlDocUrl(id, blob) {
   return url
 }
 
+// Deliberately plain and theme-neutral: it flashes briefly inside a frame
+// whose own stylesheet has not loaded yet.
+const LOADING_HTML =
+  '<!doctype html><meta charset="utf-8">' +
+  '<style>html,body{height:100%;margin:0}' +
+  'body{display:flex;align-items:center;justify-content:center;' +
+  'font:14px/1.5 system-ui,-apple-system,sans-serif;color:#8b93a1;' +
+  'background:#fff}' +
+  '@media(prefers-color-scheme:dark){body{background:#161922;color:#8b93a1}}' +
+  '</style><div>Loading from Drive…</div>'
+
+/** Swap the placeholder for the real document. srcdoc must go first: while it
+ *  is present the browser ignores src entirely. */
+function showFrame(el, url) {
+  el.removeAttribute('srcdoc')
+  el.setAttribute('src', url)
+}
+
 async function resolveElement(el) {
   const src = el.getAttribute('src') || ''
   if (!src.startsWith('drive:')) return
@@ -91,7 +109,13 @@ async function resolveElement(el) {
     // An HTML document needs its relative assets rewritten before it can load
     // from a blob: URL; anything else (PDF, PNG) is handed over as-is.
     const cached = blobs.get('html:' + id) ?? blobs.get(id)
-    if (cached) { el.setAttribute('src', cached); return }
+    if (cached) { showFrame(el, cached); return }
+
+    // Downloading a document and its assets takes a beat, and an iframe whose
+    // src it cannot load renders as a blank white box — indistinguishable from
+    // a broken page. srcdoc takes precedence over src, so a placeholder can be
+    // shown in place without touching the surrounding layout.
+    el.srcdoc = LOADING_HTML
 
     const blob = await readBlobById(id)
     let url
@@ -102,10 +126,24 @@ async function resolveElement(el) {
       blobs.set(id, url)
       blobToDrive.set(url, `drive:${id}`)
     }
-    el.setAttribute('src', url)
+    showFrame(el, url)
   } catch (e) {
     delete el.dataset.driveResolving          // let a later attempt retry
-    if (el.tagName === 'IMG') el.alt = `[unavailable: ${e.message}]`
+    // A failed <img> shows its alt text, but a failed <iframe> just sits there
+    // blank, which is indistinguishable from a slow load and impossible to
+    // diagnose. Say what happened, in the frame's place.
+    console.warn(`[sysdsg] could not load drive:${id} —`, e)
+    if (el.tagName === 'IMG') {
+      el.alt = `[unavailable: ${e.message}]`
+    } else {
+      el.removeAttribute('srcdoc')
+      const note = document.createElement('div')
+      note.className = 'sysdsg-doc-error'
+      note.style.cssText = 'padding:1.25rem;color:var(--muted,#9aa3b2);' +
+                           'font:14px/1.6 system-ui,sans-serif'
+      note.textContent = `This document could not be loaded from Drive — ${e.message}`
+      el.replaceWith(note)
+    }
   }
 }
 
