@@ -412,7 +412,7 @@
       </div>
       <div class="practice-actions" id="practiceActions" style="display:none">
         <button type="button" class="primary" id="practiceNext">Next →</button>
-        <a class="ghost" id="practiceOpen" target="_blank" rel="noopener">Open in module ↗</a>
+        <a class="ghost" id="practiceOpen">Open in module →</a>
         <span class="practice-progress" id="practiceProgress"></span>
       </div>
     </div>
@@ -434,7 +434,7 @@
     </div>
     <div class="modal-body" id="mBody"></div>
     <div class="modal-foot">
-      <a id="mOpen" target="_blank" rel="noopener">Open in module ↗</a>
+      <a id="mOpen">Open in module →</a>
     </div>
   </div>
 </div>
@@ -517,7 +517,7 @@ function itemLink(m, type, it){
   const label = esc(it.label);
   const grp = it.group ? ` <span class="tg">· ${esc(it.group)}</span>` : "";
   const search = esc((it.label + " " + (it.group || "") + " " + (m.title || "") + " " + type).toLowerCase());
-  return `<a class="ti" target="_blank" rel="noopener"
+  return `<a class="ti"
              href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
              data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
              data-s="${search}"
@@ -528,7 +528,7 @@ function itemLinkFlat(m, type, it){
   const label = esc(it.label);
   const grp = it.group ? ` · ${esc(it.group)}` : "";
   const search = esc((it.label + " " + (it.group || "") + " " + (m.title || "") + " " + type).toLowerCase());
-  return `<a class="ti" target="_blank" rel="noopener"
+  return `<a class="ti"
              href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
              data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
              data-s="${search}"
@@ -583,8 +583,8 @@ function buildTree(){
 
 /* Same destination as the module's card on the home page, one click from the tree. */
 function modOpenLink(m){
-  return `<a class="mod-open live" href="module.html?m=${encodeURIComponent(m.dir)}" target="_blank" rel="noopener"
-     title="Open ${esc(m.title)}"><i></i>Open ↗</a>`;
+  return `<a class="mod-open live" href="module.html?m=${encodeURIComponent(m.dir)}"
+     title="Open ${esc(m.title)}"><i></i>Open →</a>`;
 }
 /* Every module is always reachable now, so there is no liveness to paint — this
    only stops a click on the link from also toggling the enclosing <details>. The
@@ -938,7 +938,7 @@ document.addEventListener("click", e => {
 /* ---- module cards + liveness (unchanged) ---- */
 async function loadManifest(){ return (await fetch("hub.json", {cache:"no-store"})).json(); }
 function cardHTML(dir, m){
-  return `<a class="card" href="module.html?m=${encodeURIComponent(dir)}" target="_blank" rel="noopener">
+  return `<a class="card" href="module.html?m=${encodeURIComponent(dir)}">
       <div class="top"><span class="ico">${m.emoji||"📚"}</span><span class="t">${esc(m.title)}</span></div>
       <p class="d">${esc(m.sub||"")}</p>
       <div class="foot"><span class="dot live"><i></i><span class="lbl">in Drive</span></span><span class="go">Open →</span></div>

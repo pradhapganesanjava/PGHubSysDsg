@@ -59,20 +59,24 @@ HOWTO = '''        <h2>▶ About this hub</h2>
 # (description, old, new) — every one must match exactly once.
 EDITS = [
     ("tree item link",
-     '''             href="http://127.0.0.1:${m.port}/${HASH[type](it.id)}"
+     '''  return `<a class="ti" target="_blank" rel="noopener"
+             href="http://127.0.0.1:${m.port}/${HASH[type](it.id)}"
              data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}" data-port="${m.port}"
              data-s="${search}"
              title="${label}">${label}${grp}</a>`;''',
-     '''             href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
+     '''  return `<a class="ti"
+             href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
              data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
              data-s="${search}"
              title="${label}">${label}${grp}</a>`;'''),
 
     ("browse item link",
-     '''             href="http://127.0.0.1:${m.port}/${HASH[type](it.id)}"
+     '''  return `<a class="ti" target="_blank" rel="noopener"
+             href="http://127.0.0.1:${m.port}/${HASH[type](it.id)}"
              data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}" data-port="${m.port}"
              data-s="${search}"''',
-     '''             href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
+     '''  return `<a class="ti"
+             href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
              data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
              data-s="${search}"'''),
 
@@ -82,8 +86,8 @@ EDITS = [
      data-port="${m.port}" title="Open ${esc(m.title)} — http://127.0.0.1:${m.port}/"><i></i>:${m.port} ↗</a>`;
 }''',
      '''function modOpenLink(m){
-  return `<a class="mod-open live" href="module.html?m=${encodeURIComponent(m.dir)}" target="_blank" rel="noopener"
-     title="Open ${esc(m.title)}"><i></i>Open ↗</a>`;
+  return `<a class="mod-open live" href="module.html?m=${encodeURIComponent(m.dir)}"
+     title="Open ${esc(m.title)}"><i></i>Open →</a>`;
 }'''),
 
     ("practice pool entry",
@@ -110,7 +114,7 @@ EDITS = [
     </a>`;
 }''',
      '''function cardHTML(dir, m){
-  return `<a class="card" href="module.html?m=${encodeURIComponent(dir)}" target="_blank" rel="noopener">
+  return `<a class="card" href="module.html?m=${encodeURIComponent(dir)}">
       <div class="top"><span class="ico">${m.emoji||"📚"}</span><span class="t">${esc(m.title)}</span></div>
       <p class="d">${esc(m.sub||"")}</p>
       <div class="foot"><span class="dot live"><i></i><span class="lbl">in Drive</span></span><span class="go">Open →</span></div>
@@ -136,6 +140,32 @@ async function probe(port){ try{ await fetch("http://127.0.0.1:"+port+"/favicon.
      '''  const cards = [...document.querySelectorAll(".card")];
   status.textContent = `${cards.length} modules`;'''),
 
+    # Leftovers from the port probe, which no longer exists.
+    ("dead LIVE_PORTS set",
+     '''const LIVE_PORTS = new Set();          // ports the card probe found up; shared with the tree
+''',
+     ''''''),
+
+    ("paintModOpen no longer paints liveness",
+     '''/* reuse the card probe results so the tree shows the same live dot, and keep a click
+   on the link from also toggling the <details> — the handler sits on the link itself so
+   the event still reaches it (the module opens) but never bubbles up to the summary */
+function paintModOpen(){
+  document.querySelectorAll("#tree a.mod-open").forEach(a => {
+    a.classList.toggle("live", LIVE_PORTS.has(+a.dataset.port));
+    if (a.dataset.wired) return;''',
+     '''/* Every module is always reachable now, so there is no liveness to paint — this
+   only stops a click on the link from also toggling the enclosing <details>. The
+   handler sits on the link itself, so the event still opens the module but never
+   bubbles up to the summary. */
+function paintModOpen(){
+  document.querySelectorAll("#tree a.mod-open").forEach(a => {
+    if (a.dataset.wired) return;'''),
+
+    ("browse pill: drop the undefined port",
+     '''        `<button class="pill" data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}" data-port="${m.port}"''',
+     '''        `<button class="pill" data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"'''),
+
     ("manifest failure message",
      '''  try { man = await loadManifest(); } catch(e){ status.textContent = "needs server — run ./start.command"; return; }''',
      '''  try { man = await loadManifest(); } catch(e){ status.textContent = "sign in to load modules"; return; }'''),
@@ -157,6 +187,18 @@ async function probe(port){ try{ await fetch("http://127.0.0.1:"+port+"/favicon.
      '''_setCookie("sysdsg_hub", location.origin + "/");
 ''',
      ''''''),
+
+    # Internal navigation should stay in the same window. These two, the cards
+    # and the tree/browse links all pointed at a new tab, which turned browsing
+    # the hub into a pile of tabs. The arrow glyph changes with them so the
+    # label does not promise a new tab it no longer opens.
+    ("practice open-in-module link",
+     '''<a class="ghost" id="practiceOpen" target="_blank" rel="noopener">Open in module ↗</a>''',
+     '''<a class="ghost" id="practiceOpen">Open in module →</a>'''),
+
+    ("preview overlay open-in-module link",
+     '''<a id="mOpen" target="_blank" rel="noopener">Open in module ↗</a>''',
+     '''<a id="mOpen">Open in module →</a>'''),
 
     ("footnote",
      '''<p class="footnote" id="hubFootnote">Modules &amp; ports are defined in <code>hub.json</code>. The tree, search and previews are built live from each module's data files.</p>''',
