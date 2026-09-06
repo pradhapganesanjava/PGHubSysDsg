@@ -191,6 +191,22 @@ await test('an edit round-trips through Drive', async () => {
   return `wrote and removed ${probe}`
 })
 
+// ── shared settings ──────────────────────────────────────────────────────────
+await test('the settings file round-trips through Drive', async () => {
+  const before = await drive.readRootJson('settings.json', null)
+  const probe = { theme: 'moonlight', updatedAt: new Date().toISOString(), __probe: true }
+  await drive.writeRootJson('settings.json', probe)
+  const after = await drive.readRootJson('settings.json', null)
+  assert.equal(after?.theme, 'moonlight', 'the theme did not come back')
+  assert.equal(after?.__probe, true)
+  // Put back whatever was there, or a neutral record if there was nothing.
+  await drive.writeRootJson('settings.json',
+    before ?? { theme: 'dark', updatedAt: new Date().toISOString() })
+  const restored = await drive.readRootJson('settings.json', null)
+  assert.equal(restored?.__probe, undefined, 'cleanup left the probe behind')
+  return before ? `restored the existing record (${before.theme})` : 'seeded a default record'
+})
+
 // ── landing page ─────────────────────────────────────────────────────────────
 await test('the landing page manifest loads', async () => {
   const man = await hub.hubManifest()

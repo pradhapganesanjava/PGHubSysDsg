@@ -147,9 +147,17 @@ export async function readTextById(fileId) {
  * anything referencing the file stay valid.
  */
 export async function writeModuleJson(mod, name, data) {
-  const folder = await moduleFolderId(mod)
-  const body   = JSON.stringify(data)
-  let id = await findChild(folder, name)
+  return writeJsonInto(await moduleFolderId(mod), name, data)
+}
+
+/** Same, for a file sitting directly in the hub's root folder. */
+export async function writeRootJson(name, data) {
+  return writeJsonInto(await rootId(), name, data)
+}
+
+async function writeJsonInto(folder, name, data) {
+  const body = JSON.stringify(data)
+  const id   = await findChild(folder, name)
 
   if (id) {
     const r = await GAuth.fetch(

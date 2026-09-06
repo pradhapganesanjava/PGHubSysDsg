@@ -2093,6 +2093,9 @@ function applyTheme(name) {
   if (themeSel) themeSel.value = name;
   _setCookie("sysdsg_theme", name);
   try { localStorage.setItem("agentai-theme", name); } catch (e) {}
+  // Broadcasts to other open pages and mirrors to Drive, once the modules that
+  // provide it have loaded. The cookie above is the fast path and stands alone.
+  window.__sysdsgSettings?.setTheme(name);
   if (typeof rerenderCurrentDoc === "function") rerenderCurrentDoc();
 }
 if (themeSel) themeSel.addEventListener("change", () => applyTheme(themeSel.value));

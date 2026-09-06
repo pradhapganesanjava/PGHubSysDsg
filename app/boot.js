@@ -5,6 +5,7 @@
  * lives in Drive with everything else, so even the module titles and taglines
  * stay out of the public repository.
  */
+import * as Settings from './settings.js'
 import { installStore, flush } from './store.js'
 import { installMedia }        from './media.js'
 import { installGate }         from './gate.js'
@@ -30,3 +31,11 @@ ready.then(async () => {
     set('#mod-sub',   m.sub ?? '')
   } catch { /* identity is cosmetic — the app works without it */ }
 })
+
+// ── shared preferences ──────────────────────────────────────────────────────
+// The page's own applyTheme is a plain function in its inline script, so it is
+// on window; settings calls back into it when another page or Drive changes
+// the theme. withRemote stops that arriving change bouncing straight back out.
+window.__sysdsgSettings = Settings
+Settings.onThemeChange(t => Settings.withRemote(() => window.applyTheme?.(t)))
+Settings.syncFromDrive().catch(() => { /* the local theme stands */ })

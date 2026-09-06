@@ -190,6 +190,36 @@ read on load so they render, and their title comes from the first `# heading`.
 
 ---
 
+## Shared preferences
+
+The theme is chosen once and holds everywhere — the hub, all thirteen modules,
+other open tabs, and other machines.
+
+Three layers, in order of how quickly they apply:
+
+| Where | Scope | Why |
+|---|---|---|
+| Cookie (`sysdsg_theme`) | this browser, all pages on the origin | applies before any script or sign-in, so there is no flash of the wrong theme |
+| `BroadcastChannel` | pages open right now | a hub sitting beside a module used to go stale until it was reloaded |
+| `settings.json` in Drive | every device | a cookie does not travel |
+
+Drive wins only when it is genuinely newer: both sides carry a timestamp, so
+opening a stale tab does not undo a change made elsewhere. Writes are debounced
+and flushed on page hide.
+
+### If the tools stop working with `invalid_grant`
+
+```bash
+node tools/reauth.mjs
+```
+
+The saved refresh token has been withdrawn. Google expires them while the
+consent screen is in Testing mode, and revoking a token anywhere withdraws the
+grant for the whole Cloud project — which is why the app's sign-out drops its
+token rather than calling `revoke()`.
+
+---
+
 ## Checking the layout on a phone
 
 Both pages are behind a Google sign-in and read from a private Drive folder, so

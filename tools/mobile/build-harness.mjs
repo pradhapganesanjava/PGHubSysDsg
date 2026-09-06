@@ -113,6 +113,7 @@ export async function readRootJson(name, fb) {
   if (name === 'hub.json') return HUB
   if (name === 'hub-index.json') return HUB_INDEX
   if (name === 'search-index.json') return SEARCH
+  if (name in ROOT_FILES) return ROOT_FILES[name]
   return fb
 }
 export async function readModuleJson(mod, name, fb) {
@@ -123,7 +124,10 @@ export async function readModuleJson(mod, name, fb) {
   if (name === 'docs.json') return Object.fromEntries(DOCS_INDEX.map(d => [d.name, { tag: d.tag, tags: [] }]))
   return fb ?? {}
 }
+// A stand-in for the Drive root so settings.json round-trips like the real one.
+const ROOT_FILES = {}
 export async function writeModuleJson() { return 'id' }
+export async function writeRootJson(name, data) { ROOT_FILES[name] = data; return 'id' }
 export async function moduleFolderId() { return 'MOD' }
 export async function findChild() { return null }
 export async function listFolder() { return [] }
@@ -230,4 +234,9 @@ function inspect(doc, label) {
 })();
 </script>
 `)
+// Diagnostic pages live beside this script as real files rather than as
+// strings inside it — easier to edit, and they cannot break the build.
+for (const f of ['themetest.html']) {
+  try { await cp(join(__dir, f), join(OUT, f)) } catch { /* optional */ }
+}
 console.log('  harness built at', OUT)

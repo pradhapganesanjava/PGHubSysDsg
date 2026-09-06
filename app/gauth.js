@@ -120,7 +120,12 @@ export const GAuth = {
   },
 
   signOut() {
-    if (this._token) { try { google.accounts.oauth2.revoke(this._token) } catch {} }
+    // Deliberately NOT google.accounts.oauth2.revoke(). Revoking withdraws the
+    // user's grant to the whole Cloud project, not just this tab — which takes
+    // the command-line tooling's refresh token down with it, since it lives
+    // under the same project. Signing out of a browser session should end that
+    // session, so the token is simply dropped. It expires on its own within
+    // the hour; to withdraw access properly, use the Google account page.
     this._token = null
     this._user  = null
     try {

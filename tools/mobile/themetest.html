@@ -1,0 +1,57 @@
+<!doctype html><meta charset="utf-8"><title>theme sharing</title>
+<!-- Does a theme chosen in one place hold everywhere? Loads the hub and a
+     module as siblings and drives them the way a person would. -->
+<style>body{margin:0;font:13px/1.6 ui-monospace,Menlo,monospace;background:#0f1117;color:#e6e8ee}
+#o{padding:14px;white-space:pre-wrap}h2{font:600 13px system-ui;color:#7aa2ff;margin:12px 0 4px}
+iframe{position:absolute;left:-9999px;width:1100px;height:800px;border:0}
+.ok{color:#8fe3a6}.bad{color:#ff9b9b}</style>
+<div id="o">testing…</div>
+<script>
+const L = [];
+const load = src => new Promise(res => {
+  const f = document.createElement('iframe'); f.src = src;
+  document.body.appendChild(f);
+  f.onload = () => setTimeout(() => res(f), 1600);
+  setTimeout(() => res(f), 7000);
+});
+const themeOf = f => { try { return f.contentDocument.documentElement.getAttribute('data-theme') } catch (e) { return 'ERR' } };
+const cookie = () => (document.cookie.match(/sysdsg_theme=([^;]+)/) || [])[1] || '(none)';
+const line = (ok, msg) => '   ' + (ok ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') + '  ' + msg;
+
+(async () => {
+  document.cookie = 'sysdsg_theme=; path=/; max-age=0';
+  document.cookie = 'sysdsg_theme_at=; path=/; max-age=0';
+
+  L.push('<h2>1. the hub picks Soft</h2>');
+  const hub = await load('index.html');
+  const sw = hub.contentDocument.querySelector('.tb-swatch[data-theme="soft"]');
+  if (sw) sw.click();
+  await new Promise(r => setTimeout(r, 500));
+  L.push(line(themeOf(hub) === 'soft', 'hub is ' + themeOf(hub) + ', cookie ' + cookie()));
+
+  L.push('<h2>2. a module opened afterwards inherits it</h2>');
+  const mod = await load('module.html?m=01-foundations');
+  L.push(line(themeOf(mod) === 'soft', 'module is ' + themeOf(mod)));
+
+  L.push('<h2>3. the module switches to Moonlight</h2>');
+  const sel = mod.contentDocument.getElementById('theme');
+  if (sel) { sel.value = 'moonlight'; sel.dispatchEvent(new mod.contentWindow.Event('change')); }
+  await new Promise(r => setTimeout(r, 700));
+  L.push(line(themeOf(mod) === 'moonlight', 'module is ' + themeOf(mod) + ', cookie ' + cookie()));
+
+  L.push('<h2>4. the already-open hub follows, with no reload</h2>');
+  L.push(line(themeOf(hub) === 'moonlight', 'hub is ' + themeOf(hub)));
+
+  L.push('<h2>5. it reached the Drive settings file</h2>');
+  // The Drive write is debounced, so give it longer than the debounce window.
+  await new Promise(r => setTimeout(r, 2200));
+  let saved = '(none)';
+  try {
+    const d = await mod.contentWindow.eval("import('./app/drive.js')");
+    saved = (await d.readRootJson('settings.json', null))?.theme ?? '(none)';
+  } catch (e) { saved = 'ERR ' + e.message; }
+  L.push(line(saved === 'moonlight', 'settings.json theme = ' + saved));
+
+  document.getElementById('o').innerHTML = L.join('\n');
+})();
+</script>

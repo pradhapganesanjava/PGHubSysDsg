@@ -495,6 +495,9 @@ function applyTheme(name){
   themeSwatches.querySelectorAll(".tb-swatch").forEach(b =>
     b.setAttribute("aria-pressed", String(b.dataset.theme === name)));
   _setCookie("sysdsg_theme", name);
+  // Broadcasts to other open pages and mirrors to Drive, once the modules that
+  // provide it have loaded. The cookie above is the fast path and stands alone.
+  window.__sysdsgSettings?.setTheme(name);
 }
 themeSwatches.addEventListener("click", e => {
   const b = e.target.closest(".tb-swatch");
