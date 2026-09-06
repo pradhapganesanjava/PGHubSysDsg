@@ -1,0 +1,8 @@
+{
+  "name": "sysdsghub-tools",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "One-time migration + maintenance tooling. Never deployed.",
+  "dependencies": { "googleapis": "^171.0.0" }
+}

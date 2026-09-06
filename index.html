@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<script>
+/* Parks the page's opening fetches until app/hub-boot.js installs the
+   Drive-backed handler — module scripts are deferred, this inline app is not.
+   See the same shim in module.html. */
+(function () {
+  var native = window.fetch.bind(window);
+  var parked = [];
+  var handler = null;
+  window.__sysdsgInstall = function (fn) {
+    handler = fn;
+    var queued = parked.splice(0);
+    for (var i = 0; i < queued.length; i++) queued[i]();
+  };
+  window.fetch = function (input, init) {
+    if (handler) return handler(input, init);
+    return new Promise(function (resolve, reject) {
+      parked.push(function () { (handler || native)(input, init).then(resolve, reject); });
+    });
+  };
+})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Design Hub</title>
+<style>
+  /* ===== Shared theme palettes (identical to the module apps) ===== */
+  :root, [data-theme="dark"]{ --bg:#0f1117; --panel:#161922; --panel-2:#1d2230; --border:#2a2f3d;
+    --text:#e6e9ef; --muted:#98a2b3; --accent:#6ea8fe; --accent-soft:#1e2a44; --code-bg:#0b0d13; --accent-ink:#0b0d13; }
+  [data-theme="moonlight"]{ --bg:#0b1023; --panel:#121833; --panel-2:#1a2244; --border:#27305a;
+    --text:#dfe4ff; --muted:#8e98c9; --accent:#8b9dff; --accent-soft:#1f2a55; --code-bg:#080c1c; --accent-ink:#0b1023; }
+  [data-theme="gray"]{ --bg:#2b2f36; --panel:#33383f; --panel-2:#3c424a; --border:#4a5159;
+    --text:#e7e9ec; --muted:#a7aeb6; --accent:#9fb0c0; --accent-soft:#3f4651; --code-bg:#23272d; --accent-ink:#1b1e23; }
+  [data-theme="soft"]{ --bg:#f6f4f1; --panel:#fffdfb; --panel-2:#f0ebe5; --border:#e6ded6;
+    --text:#4b4658; --muted:#9b93a3; --accent:#9d8ec2; --accent-soft:#ece7f5; --code-bg:#f4efea; --accent-ink:#ffffff; }
+  [data-theme="white"]{ --bg:#ffffff; --panel:#f7f8fa; --panel-2:#eef1f6; --border:#dfe3ea;
+    --text:#1a1d24; --muted:#667085; --accent:#2563eb; --accent-soft:#e5edff; --code-bg:#f3f5f9; --accent-ink:#ffffff; }
+  [data-theme="colorful"]{ --bg:#fef6ff; --panel:#ffffff; --panel-2:#fbeeff; --border:#f0d7f5;
+    --text:#2a1b33; --muted:#8a6f93; --accent:#e0179d; --accent-soft:#ffe1f4; --code-bg:#2a1b33; --accent-ink:#ffffff; }
+  [data-theme="cartoon"]{ --bg:#fffbe7; --panel:#ffffff; --panel-2:#fff3c4; --border:#1a1a1a;
+    --text:#1a1a1a; --muted:#7a6f3a; --accent:#ff5c8a; --accent-soft:#ffe0ea; --code-bg:#1a1a1a; --accent-ink:#1a1a1a; }
+  :root{ --live:#3fb950; --off:#8a93a3; }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{display:flex;flex-direction:column;color:var(--text);line-height:1.6;background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:inherit;text-decoration:none}
+
+  /* ===== Top header banner (title + tagline, two lines) ===== */
+  #topbanner{flex:0 0 auto;background:var(--panel);border-bottom:1px solid var(--border);
+    padding:8px 18px;display:flex;align-items:baseline;justify-content:center;gap:9px;white-space:nowrap;overflow:hidden}
+  #topbanner .tb-title{font-size:1.02rem;font-weight:700;letter-spacing:-0.01em;flex:0 0 auto}
+  #topbanner .tb-sep{color:var(--muted);flex:0 0 auto}
+  #topbanner .tb-tagline{color:var(--muted);font-size:.82rem;margin:0;flex:0 1 auto;min-width:0;
+    overflow:hidden;text-overflow:ellipsis}
+  #appbody{flex:1;display:flex;min-height:0}
+
+  /* ===== Left navigation ===== */
+  #sidebar{width:var(--sb-w,320px);flex:0 0 var(--sb-w,320px);height:100%;overflow-y:auto;background:var(--panel);
+    border-right:1px solid var(--border);padding:16px 12px 40px;margin-left:0;transition:margin-left .2s ease}
+  body:not(.nav-on) #sidebar{margin-left:calc(-1 * var(--sb-w,320px) - 8px)}
+  .sb-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;padding:2px 6px 12px}
+  .sb-title .sub{font-weight:400;color:var(--muted);font-size:.78rem}
+  .sb-search{position:sticky;top:0;background:var(--panel);padding-bottom:10px;z-index:2}
+  .sb-tools{display:flex;gap:6px;align-items:stretch;margin-bottom:8px}
+  #treeSearch{flex:1;min-width:0;width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:8px 11px;font-size:.85rem;font-family:inherit}
+  #treeSearch:focus{outline:none;border-color:var(--accent)}
+  .view-toggle{display:flex;gap:3px;background:var(--panel-2);padding:3px;border-radius:8px;
+    border:1px solid var(--border);flex:none}
+  .view-toggle button{border:0;background:transparent;color:var(--muted);cursor:pointer;
+    width:30px;padding:0;border-radius:6px;display:grid;place-items:center}
+  .view-toggle button svg,.sb-iconbtn svg{display:block}
+  .view-toggle button.active{background:var(--accent);color:var(--accent-ink)}
+  .sb-iconbtn{flex:none;border:1px solid var(--border);background:var(--panel-2);color:var(--muted);
+    width:34px;border-radius:8px;cursor:pointer;display:grid;place-items:center;padding:0}
+  .sb-iconbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .sb-meta{color:var(--muted);font-size:.74rem;padding:2px 6px 8px}
+  #tree.flat-mode a.ti{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  #tree.flat-mode a.ti .fm{flex:0 0 auto;font-size:.9rem;line-height:1}
+  #tree.flat-mode a.ti .ft{flex:0 0 auto;font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:0 6px}
+  #tree.flat-mode a.ti .fl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  details.mod{border-radius:8px;margin:1px 0}
+  details.mod>summary,details.grp>summary{list-style:none;cursor:pointer;user-select:none}
+  details.mod>summary::-webkit-details-marker,details.grp>summary::-webkit-details-marker{display:none}
+  details.mod>summary{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;font-weight:600;font-size:.9rem}
+  details.mod>summary:hover{background:var(--panel-2)}
+  summary .caret{color:var(--muted);font-size:.7rem;width:10px;transition:transform .15s;flex:0 0 auto}
+  details[open]>summary .caret{transform:rotate(90deg)}
+  summary .me{font-size:1rem}
+  summary .mt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* "open the module app" link on a module row — same destination as its card */
+  a.mod-open{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;font-size:.7rem;font-weight:600;
+    color:var(--muted);border:1px solid var(--border);border-radius:20px;padding:1px 8px;
+    text-decoration:none;opacity:0;transition:opacity .12s,color .12s,border-color .12s}
+  a.mod-open i{width:6px;height:6px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+  a.mod-open.live i{background:#3fbf7f;box-shadow:0 0 0 3px rgba(63,191,127,.16)}
+  details.mod>summary:hover a.mod-open,a.mod-open:focus-visible{opacity:1}
+  a.mod-open:hover{color:var(--accent);border-color:var(--accent)}
+  .c{color:var(--muted);font-size:.72rem;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:20px;padding:0 7px;flex:0 0 auto}
+  .sub{padding:2px 0 6px 14px}
+  details.grp>summary{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;font-size:.8rem;
+    color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  details.grp>summary:hover{background:var(--panel-2);color:var(--text)}
+  .grp .items{padding:2px 0 4px 6px;border-left:1px solid var(--border);margin-left:8px}
+  a.ti{display:block;padding:4px 9px;border-radius:6px;font-size:.83rem;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  a.ti:hover{background:var(--accent-soft);color:var(--text)}
+  a.ti .tg{color:var(--muted);font-size:.7rem;opacity:.7}
+
+  /* ===== Main content ===== */
+  /* draggable divider between the left nav and the center content */
+  #sb-resize{flex:0 0 6px;cursor:col-resize;background:transparent;position:relative;z-index:4;align-self:stretch}
+  #sb-resize::before{content:"";position:absolute;left:2px;top:0;bottom:0;width:1px;background:var(--border)}
+  #sb-resize:hover::before,#sb-resize.dragging::before{background:var(--accent);width:2px}
+  body:not(.nav-on) #sb-resize{display:none}
+  #content{flex:1;min-width:0;height:100%;overflow-y:auto;
+    background:radial-gradient(1200px 620px at 50% -12%, var(--panel-2) 0%, var(--bg) 62%)}
+  .wrap{max-width:1080px;margin:0 auto;padding:36px 26px 90px}
+  .topbar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .iconbtn{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    width:38px;height:38px;border-radius:9px;font-size:1.05rem;cursor:pointer;flex:0 0 auto}
+  .iconbtn:hover{border-color:var(--accent)}
+  .hero{text-align:center;margin:10px 0 2px}
+  .hero h1{font-size:clamp(1.8rem,4.5vw,2.8rem);margin:0 0 10px;letter-spacing:-0.02em}
+  .hero p{color:var(--muted);font-size:1.02rem;max-width:64ch;margin:0 auto}
+  .searchrow{display:flex;justify-content:center;margin:22px 0 6px}
+  .search-wrap{position:relative;width:100%;max-width:560px}
+  #mainSearch{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);
+    border-radius:11px;padding:12px 14px 12px 40px;font-size:.95rem;font-family:inherit}
+  #mainSearch:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .search-wrap .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)}
+  .bar{display:flex;align-items:center;justify-content:center;gap:10px;margin:12px 0 6px;flex-wrap:wrap}
+  .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:7px 13px;font-size:.85rem;
+    cursor:pointer;font-family:inherit}
+  .seg button.active{background:var(--accent);color:#fff}
+  .mini{background:var(--panel-2);border:1px solid var(--border);color:var(--muted);
+    padding:7px 13px;border-radius:8px;font-size:.85rem;cursor:pointer;font-family:inherit}
+  .mini:hover{color:var(--text);border-color:var(--accent)}
+  .theme-select{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:7px 12px;border-radius:8px;font-size:.85rem;font-family:inherit;cursor:pointer}
+  .theme-select:focus{border-color:var(--accent);outline:none}
+  .status{font-size:.82rem;color:var(--muted)}
+  .cat{margin-top:34px}
+  .cat-head{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--border);
+    padding-bottom:8px;margin-bottom:18px;flex-wrap:wrap}
+  .cat-head h2{margin:0;font-size:1.2rem;letter-spacing:-0.01em}
+  .cat-head .blurb{color:var(--muted);font-size:.86rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+  .card{position:relative;display:flex;flex-direction:column;background:var(--panel);
+    border:1px solid var(--border);border-radius:14px;padding:20px 20px 16px;
+    transition:border-color .15s,transform .15s,box-shadow .15s}
+  .card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 10px 30px -14px var(--accent)}
+  .card .top{display:flex;align-items:center;gap:12px}
+  .card .ico{font-size:1.8rem;line-height:1}
+  .card .t{font-weight:700;font-size:1.16rem}
+  .card .d{color:var(--muted);font-size:.86rem;margin:12px 0 0;flex:1}
+  .card .foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px}
+  .dot{display:inline-flex;align-items:center;gap:7px;font-size:.76rem;color:var(--muted)}
+  .dot i{width:8px;height:8px;border-radius:50%;background:var(--off);display:inline-block}
+  .dot.live i{background:var(--live);box-shadow:0 0 8px var(--live)}
+  .dot.live{color:var(--live)}
+  .go{font-size:.82rem;color:var(--accent);font-weight:600}
+  .card.off .go{color:var(--muted)}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;margin-top:34px}
+  .panel h2{margin:0 0 8px;font-size:1.12rem}
+  .panel p{color:var(--muted);margin:8px 0}
+  .cmd{display:inline-flex;align-items:center;gap:10px;margin-top:8px;background:var(--panel-2);
+    border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+    font-family:ui-monospace,Menlo,monospace;font-size:.82rem;color:var(--text)}
+  code{font-family:ui-monospace,Menlo,monospace;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:5px;padding:1px 6px;font-size:.85em}
+  .footnote{text-align:center;color:var(--muted);font-size:.8rem;margin-top:40px}
+
+  /* ===== Browse-all view (main) ===== */
+  #browse{margin-top:26px}
+  .bmod{margin-bottom:22px}
+  .bmod h3{display:flex;align-items:center;gap:9px;margin:0 0 10px;font-size:1.06rem;
+    border-bottom:1px solid var(--border);padding-bottom:7px}
+  .bmod h3 .c{margin-left:auto}
+  .btype{margin:8px 0}
+  .btype .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px}
+  .pills{display:flex;flex-wrap:wrap;gap:7px}
+  .pill{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;
+    padding:6px 11px;font-size:.83rem;cursor:pointer;font-family:inherit;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:border-color .12s,background .12s}
+  .pill:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .pill .k{color:var(--muted);font-size:.68rem;opacity:.8;margin-left:6px}
+  .no-results{color:var(--muted);font-size:.9rem;text-align:center;padding:30px}
+
+  /* ===== Item popup ===== */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:none;
+    align-items:flex-start;justify-content:center;padding:5vh 16px}
+  .overlay.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;width:min(760px,100%);
+    max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)}
+  .modal-head{display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--border)}
+  .modal-head .mh-emoji{font-size:1.1rem}
+  .modal-head .mh-mod{font-weight:600;font-size:.9rem}
+  .modal-head .mh-type{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    border:1px solid var(--border);border-radius:20px;padding:1px 9px}
+  .modal-head .sp{flex:1}
+  .modal-head button{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:1rem}
+  .modal-head button:hover{border-color:var(--accent)}
+  .modal-body{padding:18px 20px;overflow-y:auto}
+  .modal-body h2{margin:0 0 8px;font-size:1.35rem}
+  .modal-body h4{margin:16px 0 5px;font-size:.95rem;color:var(--accent)}
+  .modal-body .chip{display:inline-block;font-size:.72rem;color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--border);border-radius:20px;padding:1px 9px;margin-bottom:10px}
+  .modal-body .lede{color:var(--muted);font-size:1rem;margin:0 0 6px}
+  .modal-body pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;
+    overflow-x:auto;font-size:.82rem}
+  .modal-body table{border-collapse:collapse;width:100%;margin:8px 0;font-size:.88rem;display:block;overflow-x:auto}
+  .modal-body th,.modal-body td{border:1px solid var(--border);padding:6px 9px;text-align:left}
+  .modal-body img{max-width:100%}
+  .modal-body .qbox{background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:8px;padding:11px 13px;margin-bottom:14px;font-weight:600}
+  .modal-body .hint{color:var(--muted);font-size:.88rem;margin-top:12px;font-style:italic}
+  .modal-body .rel{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .modal-body .rel .p{font-size:.76rem;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:8px;padding:2px 8px;color:var(--muted)}
+  .modal-body .ah{font-weight:700;margin:14px 0 4px}
+  .modal-body .tldr{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:9px 12px}
+  .modal-body .flow{white-space:pre;font-family:ui-monospace,Menlo,monospace;font-size:.8rem}
+  .modal-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+  .modal-foot a{font-size:.85rem;color:var(--accent);font-weight:600;border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px}
+  .modal-foot a:hover{border-color:var(--accent)}
+
+  .scrim{display:none}
+  @media(max-width:860px){
+    #sidebar{position:fixed;z-index:60;box-shadow:0 0 40px rgba(0,0,0,.5)}
+    #sb-resize{display:none}
+    body:not(.nav-on) #sidebar{margin-left:calc(-1 * var(--sb-w,320px) - 8px)}
+    .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55}
+    body.nav-on .scrim{display:block}
+  }
+  /* ===== authored content helpers (terms/qa/topics) — shared by module apps and hub preview ===== */
+  .modal-body .tag { display:inline-block;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);background:var(--accent-soft);border:1px solid var(--border);border-radius:6px;padding:1px 7px;margin-right:8px;vertical-align:middle; }
+  .modal-body .note { background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:10px 13px;margin:12px 0; }
+  .modal-body .chips { display:flex;flex-wrap:wrap;gap:6px;margin:10px 0; }
+  .modal-body .chip { font-size:.78rem;background:var(--panel-2);border:1px solid var(--border);border-radius:20px;padding:2px 10px;color:var(--text); }
+  .modal-body .scale { display:flex;align-items:stretch;gap:10px;margin:12px 0;flex-wrap:wrap; }
+  .modal-body .scale .pan { flex:1 1 200px; }
+  .modal-body .pan { background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px; }
+  .modal-body .pan h4 { margin:0 0 4px;font-size:.85rem;color:var(--accent); }
+  .modal-body .vs { display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;padding:0 4px; }
+  .modal-body .callout { background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:12px 15px;margin:14px 0; }
+  .modal-body .callout h2 { margin:0 0 6px;font-size:1rem; }
+  .modal-body .callout.tradeoff { border-left:3px solid #e0803a; }
+  .modal-body .proscons { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:12px 0; }
+  .modal-body .proscons h3 { margin:0 0 4px;font-size:.9rem; }
+  .modal-body .proscons ul { margin:0;padding-left:1.1em; }
+  .modal-body .ah { font-weight:700;margin:14px 0 4px; }
+  .modal-body .tight { margin:4px 0;padding-left:1.2em; }
+  .modal-body .tight li { margin:1px 0; }
+  .modal-body .tldr { background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin:0 0 12px; }
+  .modal-body .flow { white-space:pre;font-family:ui-monospace,Menlo,monospace;font-size:.8rem;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto; }
+
+  /* ===== Practice mode ===== */
+  #practiceView{margin-top:10px;max-width:720px;margin-left:auto;margin-right:auto}
+  .practice-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .practice-head h2{margin:0;font-size:1.25rem}
+  .practice-head .pm{color:var(--muted);font-size:.82rem;flex:1;min-width:140px}
+  .practice-head .primary{background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);
+    padding:8px 14px;border-radius:9px;font-size:.9rem;font-weight:650;cursor:pointer;font-family:inherit}
+  .practice-head .primary:hover{filter:brightness(1.08)}
+  .practice-head .primary:disabled{opacity:.5;cursor:wait}
+  .practice-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px 24px;min-height:220px}
+  .practice-mod{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .practice-mod .chip{font-size:.72rem;color:var(--muted);background:var(--panel-2);border:1px solid var(--border);
+    border-radius:20px;padding:2px 10px}
+  .practice-q{margin:0 0 18px;font-size:clamp(1.15rem,2.5vw,1.45rem);line-height:1.45;letter-spacing:-.01em}
+  .practice-details{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:0;margin:0}
+  .practice-details>summary{cursor:pointer;list-style:none;padding:12px 16px;font-weight:600;font-size:.92rem;
+    color:var(--accent);user-select:none;display:flex;align-items:center;gap:8px}
+  .practice-details>summary::-webkit-details-marker{display:none}
+  .practice-details>summary::before{content:"▶";font-size:.7rem;color:var(--muted);transition:transform .15s}
+  .practice-details[open]>summary::before{transform:rotate(90deg)}
+  .practice-details>summary:hover{background:var(--accent-soft);border-radius:10px}
+  .practice-details[open]>summary{border-bottom:1px solid var(--border);border-radius:10px 10px 0 0}
+  .practice-body{padding:14px 16px 16px;font-size:.95rem;line-height:1.65}
+  .practice-body .hint{color:var(--muted);font-size:.88rem;margin-top:12px;font-style:italic;
+    border-top:1px dashed var(--border);padding-top:10px}
+  .practice-actions{display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .practice-actions .primary{background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);
+    padding:10px 18px;border-radius:9px;font-size:.95rem;font-weight:650;cursor:pointer;font-family:inherit}
+  .practice-actions .primary:hover{filter:brightness(1.08)}
+  .practice-actions .primary:disabled{opacity:.5;cursor:wait}
+  .practice-actions .ghost{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:10px 14px;border-radius:9px;font-size:.9rem;cursor:pointer;font-family:inherit;text-decoration:none}
+  .practice-actions .ghost:hover{border-color:var(--accent)}
+  .practice-empty{color:var(--muted);text-align:center;padding:40px 16px}
+  .practice-progress{color:var(--muted);font-size:.8rem;margin-left:auto}
+  .practice-kind{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .practice-kind button{background:transparent;border:0;color:var(--muted);padding:7px 12px;font-size:.85rem;
+    cursor:pointer;font-family:inherit}
+  .practice-kind button.active{background:var(--accent);color:var(--accent-ink)}
+  .practice-body h4{margin:14px 0 4px;font-size:.95rem;color:var(--accent)}
+  .practice-body .lede{color:var(--muted);margin:0 0 8px}
+  .practice-body .rel{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .practice-body .rel .p{font-size:.76rem;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;padding:2px 8px;color:var(--muted)}
+  .practice-body pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;
+    overflow-x:auto;font-size:.82rem}
+</style>
+</head>
+<body>
+<header id="topbanner">
+  <span class="tb-title">🧭 System Design Hub</span>
+  <span class="tb-sep">·</span>
+  <span class="tb-tagline" id="tagline">Everything about system design — foundations, patterns, distributed systems, backend, trade-offs, worked designs — one launcher, each module its own app.</span>
+</header>
+<div id="appbody">
+<aside id="sidebar">
+  <div class="sb-title">📚 Contents <span class="sub">terms · qa · topics</span></div>
+  <div class="sb-search">
+    <div class="sb-tools">
+      <input id="treeSearch" type="search" placeholder="Search all modules…" autocomplete="off">
+      <div class="view-toggle" role="group" aria-label="Contents layout">
+        <button type="button" id="btn-tree" class="active" title="Hierarchy view" aria-label="Hierarchy view">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="6" height="2" rx="1"/><rect x="6" y="7" width="9" height="2" rx="1"/><rect x="6" y="11.5" width="9" height="2" rx="1"/></svg>
+        </button>
+        <button type="button" id="btn-flat" title="Flat list" aria-label="Flat list">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="11.5" width="14" height="2" rx="1"/></svg>
+        </button>
+      </div>
+      <button type="button" class="sb-iconbtn" id="btn-collapse" title="Collapse / expand all" aria-label="Collapse or expand all">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l4-4 4 4M4 13l4-4 4 4"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="sb-meta" id="treeMeta">loading…</div>
+  <div id="tree"></div>
+</aside>
+<div id="sb-resize" title="Drag to resize"></div>
+<div class="scrim" id="scrim"></div>
+
+<div id="content">
+  <main class="wrap">
+    <div class="topbar">
+      <button class="iconbtn" id="navToggle" title="Show / hide contents" aria-label="Toggle contents">☰</button>
+    </div>
+
+    <div class="searchrow">
+      <div class="search-wrap">
+        <span class="mag">🔎</span>
+        <input id="mainSearch" type="search" placeholder="Search terms, Q&amp;A, topics across all modules…" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="bar">
+      <div class="seg" id="viewSeg">
+        <button data-view="modules" class="active">🧩 Modules</button>
+        <button data-view="browse">📇 Browse all</button>
+        <button data-view="practice">🎯 Practice</button>
+      </div>
+      <select id="theme" class="theme-select" aria-label="Theme">
+        <option value="dark">🌙 Dark</option>
+        <option value="moonlight">🌌 Moonlight</option>
+        <option value="gray">🌫️ Gray</option>
+        <option value="soft">🪶 Soft</option>
+        <option value="white">☀️ White</option>
+        <option value="colorful">🎨 Colorful</option>
+        <option value="cartoon">🦄 Cartoon</option>
+      </select>
+      <button class="mini" id="refresh">🔄 Re-check</button>
+      <span class="status" id="status">loading…</span>
+    </div>
+
+    <div id="modulesView">
+      <div id="cats"></div>
+      <div class="panel" id="howto">
+        <h2>▶ About this hub</h2>
+        <p>Every term, answer, topic and document lives in a private Google Drive
+        folder — nothing is stored in this site. Sign in with the account that owns
+        that folder and the hub fills itself in. Click a card to open a module, or
+        click any item in the left panel / Browse view to preview it right here.</p>
+        <p>Edits you make are saved straight back to Drive.</p>
+      </div>
+    </div>
+
+    <div id="browse" style="display:none"></div>
+
+    <div id="practiceView" style="display:none" hidden>
+      <div class="practice-head">
+        <button type="button" class="mini" id="practiceBack" title="Back to hub">← Back</button>
+        <h2>🎯 Practice</h2>
+        <div class="practice-kind" id="practiceKind" role="group" aria-label="Practice type">
+          <button type="button" data-kind="qa" class="active">Q&amp;A</button>
+          <button type="button" data-kind="terms">Terms</button>
+        </div>
+        <button type="button" class="primary" id="practiceNextTop">Next →</button>
+        <span class="pm" id="practiceMeta">Random across all modules</span>
+      </div>
+      <div class="practice-card" id="practiceCard">
+        <p class="practice-empty">Loading…</p>
+      </div>
+      <div class="practice-actions" id="practiceActions" style="display:none">
+        <button type="button" class="primary" id="practiceNext">Next →</button>
+        <a class="ghost" id="practiceOpen" target="_blank" rel="noopener">Open in module ↗</a>
+        <span class="practice-progress" id="practiceProgress"></span>
+      </div>
+    </div>
+
+    <p class="footnote" id="hubFootnote">Content is read from Google Drive. The tree, search and previews are built live from each module's data.</p>
+  </main>
+</div>
+</div>
+
+<!-- item preview popup -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <span class="mh-emoji" id="mhEmoji"></span>
+      <span class="mh-mod" id="mhMod"></span>
+      <span class="mh-type" id="mhType"></span>
+      <span class="sp"></span>
+      <button id="mClose" title="Close (Esc)" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="mBody"></div>
+    <div class="modal-foot">
+      <a id="mOpen" target="_blank" rel="noopener">Open in module ↗</a>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---- shared theme + hub cookie (cookies ignore port, so all modules share them) ---- */
+function _setCookie(k, v){ try { document.cookie = k + "=" + encodeURIComponent(v) + ";path=/;max-age=31536000;SameSite=Lax"; } catch(e){} }
+function _getCookie(k){ var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + k + "=([^;]+)")); return m ? decodeURIComponent(m[1]) : null; }
+_setCookie("sysdsg_hub", location.origin + "/");
+const themeSel = document.getElementById("theme");
+function applyTheme(name){
+  document.documentElement.setAttribute("data-theme", name);
+  themeSel.value = name;
+  _setCookie("sysdsg_theme", name);
+}
+themeSel.addEventListener("change", () => applyTheme(themeSel.value));
+applyTheme(_getCookie("sysdsg_theme") || "dark");
+document.addEventListener("visibilitychange", function(){
+  if (document.hidden) return;
+  var c = _getCookie("sysdsg_theme");
+  if (c && c !== document.documentElement.getAttribute("data-theme")) applyTheme(c);
+});
+
+/* ---- sidebar show/hide ---- */
+const body = document.body;
+if (window.innerWidth > 860) body.classList.add("nav-on");
+document.getElementById("navToggle").onclick = () => body.classList.toggle("nav-on");
+document.getElementById("scrim").onclick = () => body.classList.remove("nav-on");
+
+/* ---- draggable left-nav width (persisted) ---- */
+(function(){
+  var MIN = 200, MAX = 560;
+  var saved = parseInt(localStorage.getItem("hub-sb-w") || "", 10);
+  if (saved >= MIN && saved <= MAX) document.documentElement.style.setProperty("--sb-w", saved + "px");
+  var handle = document.getElementById("sb-resize"), dragging = false;
+  function onMove(e){
+    if (!dragging) return;
+    var w = Math.max(MIN, Math.min(MAX, e.clientX));
+    document.documentElement.style.setProperty("--sb-w", w + "px");
+  }
+  function onUp(){
+    if (!dragging) return;
+    dragging = false; handle.classList.remove("dragging");
+    document.body.style.userSelect = ""; document.body.style.cursor = "";
+    var cur = getComputedStyle(document.documentElement).getPropertyValue("--sb-w").trim();
+    var n = parseInt(cur, 10); if (n) localStorage.setItem("hub-sb-w", n);
+    window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);
+  }
+  if (handle) handle.addEventListener("mousedown", function(e){
+    e.preventDefault(); dragging = true; handle.classList.add("dragging");
+    document.body.style.userSelect = "none"; document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+  });
+  // double-click the divider to reset to the default medium width
+  if (handle) handle.addEventListener("dblclick", function(){
+    document.documentElement.style.removeProperty("--sb-w"); localStorage.removeItem("hub-sb-w");
+  });
+})();
+
+/* ---- helpers ---- */
+const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const HASH = { terms: id => "#"+encodeURIComponent(id),
+               qa:    id => "#qa/"+encodeURIComponent(id),
+               topics:id => "#topic/"+encodeURIComponent(id) };
+const TYPE_LABEL = { terms:"Terms", qa:"Q&amp;A", topics:"Topics" };
+const TYPE_ONE   = { terms:"Term", qa:"Q&A", topics:"Topic" };
+let INDEX = { modules: [] };
+
+/* ---- fetch the on-disk content index once ---- */
+async function loadIndex(){
+  try { INDEX = await (await fetch("/__index__.json", {cache:"no-store"})).json(); }
+  catch(e){ INDEX = { modules: [] }; }
+}
+
+/* ---- left tree ---- */
+const savePref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const loadPref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
+let treeMode = loadPref("sysdsg-hub-nav-view", "tree"); // "tree" | "flat"
+
+function itemLink(m, type, it){
+  const label = esc(it.label);
+  const grp = it.group ? ` <span class="tg">· ${esc(it.group)}</span>` : "";
+  const search = esc((it.label + " " + (it.group || "") + " " + (m.title || "") + " " + type).toLowerCase());
+  return `<a class="ti" target="_blank" rel="noopener"
+             href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
+             data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
+             data-s="${search}"
+             title="${label}">${label}${grp}</a>`;
+}
+
+function itemLinkFlat(m, type, it){
+  const label = esc(it.label);
+  const grp = it.group ? ` · ${esc(it.group)}` : "";
+  const search = esc((it.label + " " + (it.group || "") + " " + (m.title || "") + " " + type).toLowerCase());
+  return `<a class="ti" target="_blank" rel="noopener"
+             href="module.html?m=${encodeURIComponent(m.dir)}${HASH[type](it.id)}"
+             data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
+             data-s="${search}"
+             title="${esc(m.title)} · ${TYPE_ONE[type]} · ${label}${it.group ? " · " + esc(it.group) : ""}">
+             <span class="fm">${m.emoji || "📚"}</span>
+             <span class="ft">${TYPE_ONE[type]}</span>
+             <span class="fl">${label}<span class="tg">${grp}</span></span>
+           </a>`;
+}
+
+function buildTree(){
+  const tree = document.getElementById("tree");
+  const meta = document.getElementById("treeMeta");
+  if (!INDEX.modules.length){ meta.textContent = "sign in to load contents"; tree.innerHTML=""; return; }
+  let totT=0, totQ=0, totP=0;
+  INDEX.modules.forEach(m => { totT += m.terms.length; totQ += m.qa.length; totP += m.topics.length; });
+  meta.textContent = `${INDEX.modules.length} modules · ${totT} terms · ${totQ} Q&A · ${totP} topics`;
+  meta.dataset.base = meta.textContent;
+
+  tree.classList.toggle("flat-mode", treeMode === "flat");
+  document.getElementById("btn-tree").classList.toggle("active", treeMode === "tree");
+  document.getElementById("btn-flat").classList.toggle("active", treeMode === "flat");
+  document.getElementById("btn-collapse").style.visibility = treeMode === "tree" ? "visible" : "hidden";
+
+  if (treeMode === "flat"){
+    const rows = [];
+    INDEX.modules.forEach(m => {
+      ["terms","qa","topics"].forEach(type => {
+        m[type].forEach(it => rows.push(itemLinkFlat(m, type, it)));
+      });
+    });
+    tree.innerHTML = rows.length
+      ? `<div class="items flat-list">${rows.join("")}</div>`
+      : `<p class="sb-meta">No items yet.</p>`;
+    return;
+  }
+
+  tree.innerHTML = INDEX.modules.map(m => {
+    const total = m.terms.length + m.qa.length + m.topics.length;
+    const groups = ["terms","qa","topics"].map(type => {
+      const items = m[type]; if (!items.length) return "";
+      const rows = items.map(it => itemLink(m, type, it)).join("");
+      return `<details class="grp"><summary><span class="caret">▶</span>${TYPE_LABEL[type]}<span class="c">${items.length}</span></summary>
+                <div class="items">${rows}</div></details>`;
+    }).join("");
+    return `<details class="mod"><summary><span class="caret">▶</span><span class="me">${m.emoji||"📚"}</span>
+        <span class="mt">${esc(m.title)}</span>${modOpenLink(m)}<span class="c">${total}</span></summary>
+        <div class="sub">${groups}</div></details>`;
+  }).join("");
+  paintModOpen();
+}
+
+/* Same destination as the module's card on the home page, one click from the tree. */
+function modOpenLink(m){
+  return `<a class="mod-open live" href="module.html?m=${encodeURIComponent(m.dir)}" target="_blank" rel="noopener"
+     title="Open ${esc(m.title)}"><i></i>Open ↗</a>`;
+}
+/* Every module is always reachable now, so there is no liveness to paint — this
+   only stops a click on the link from also toggling the enclosing <details>. The
+   handler sits on the link itself, so the event still opens the module but never
+   bubbles up to the summary. */
+function paintModOpen(){
+  document.querySelectorAll("#tree a.mod-open").forEach(a => {
+    if (a.dataset.wired) return;
+    a.dataset.wired = "1";
+    a.addEventListener("click", e => e.stopPropagation());
+  });
+}
+
+function setTreeMode(mode){
+  treeMode = mode;
+  savePref("sysdsg-hub-nav-view", mode);
+  const q = document.getElementById("treeSearch").value;
+  buildTree();
+  if (q) runSearch(q, document.getElementById("tree"));
+}
+
+function toggleExpandAll(){
+  if (treeMode !== "tree") return;
+  const nodes = [...document.querySelectorAll("#tree details.mod, #tree details.grp")]
+    .filter(d => d.style.display !== "none");
+  if (!nodes.length) return;
+  const anyOpen = nodes.some(d => d.open);
+  nodes.forEach(d => { d.open = !anyOpen; });
+}
+
+/* ---- main Browse-all view ---- */
+function buildBrowse(){
+  const el = document.getElementById("browse");
+  if (!INDEX.modules.length){ el.innerHTML = '<p class="no-results">Sign in to load contents.</p>'; return; }
+  el.innerHTML = INDEX.modules.map(m => {
+    const total = m.terms.length + m.qa.length + m.topics.length;
+    const types = ["terms","qa","topics"].map(type => {
+      const items = m[type]; if (!items.length) return "";
+      const pills = items.map(it =>
+        `<button class="pill" data-item data-dir="${m.dir}" data-type="${type}" data-id="${esc(it.id)}"
+           data-s="${esc((it.label+' '+(it.group||'')).toLowerCase())}" title="${esc(it.label)}${it.group?' · '+esc(it.group):''}">${esc(it.label)}<span class="k">${TYPE_ONE[type]}</span></button>`
+      ).join("");
+      return `<div class="btype"><div class="lbl">${TYPE_LABEL[type]} (${items.length})</div><div class="pills">${pills}</div></div>`;
+    }).join("");
+    return `<section class="bmod"><h3><span>${m.emoji||"📚"}</span> ${esc(m.title)} <span class="c">${total}</span></h3>${types}</section>`;
+  }).join("");
+}
+
+/* ---- unified search (works on both tree links and browse pills) ---- */
+function runSearch(q, root){
+  q = q.trim().toLowerCase();
+  let shown = 0;
+  if (root === document.getElementById("tree")){
+    if (treeMode === "flat"){
+      root.querySelectorAll("a.ti").forEach(it => {
+        const hit = !q || it.dataset.s.includes(q);
+        it.style.display = hit ? "" : "none";
+        if (hit && q) shown++;
+      });
+    } else {
+      root.querySelectorAll("details.mod").forEach(mod => {
+        let modVis = false;
+        mod.querySelectorAll("details.grp").forEach(grp => {
+          let grpVis = false;
+          grp.querySelectorAll("a.ti").forEach(it => {
+            const hit = !q || it.dataset.s.includes(q);
+            it.style.display = hit ? "" : "none"; if (hit){ grpVis = true; if (q) shown++; }
+          });
+          grp.style.display = grpVis ? "" : "none"; grp.open = q ? grpVis : false; if (grpVis) modVis = true;
+        });
+        mod.style.display = modVis ? "" : "none"; mod.open = q ? modVis : false;
+      });
+    }
+    const meta = document.getElementById("treeMeta");
+    meta.textContent = q ? (shown ? `${shown} match${shown===1?"":"es"}` : "no matches") : (meta.dataset.base || "");
+  } else {
+    root.querySelectorAll("section.bmod").forEach(sec => {
+      let secVis = false;
+      sec.querySelectorAll(".btype").forEach(bt => {
+        let btVis = false;
+        bt.querySelectorAll(".pill").forEach(p => {
+          const hit = !q || p.dataset.s.includes(q);
+          p.style.display = hit ? "" : "none"; if (hit){ btVis = true; if (q) shown++; }
+        });
+        bt.style.display = btVis ? "" : "none"; if (btVis) secVis = true;
+      });
+      sec.style.display = secVis ? "" : "none";
+    });
+    let nr = root.querySelector(".no-results");
+    if (q && shown === 0){ if(!nr){ nr=document.createElement("p"); nr.className="no-results"; root.appendChild(nr);} nr.textContent = `No matches for “${q}”.`; nr.style.display=""; }
+    else if (nr){ nr.style.display = "none"; }
+  }
+}
+document.getElementById("treeSearch").addEventListener("input", e => runSearch(e.target.value, document.getElementById("tree")));
+document.getElementById("btn-tree").addEventListener("click", () => setTreeMode("tree"));
+document.getElementById("btn-flat").addEventListener("click", () => setTreeMode("flat"));
+document.getElementById("btn-collapse").addEventListener("click", toggleExpandAll);
+const mainSearch = document.getElementById("mainSearch");
+mainSearch.addEventListener("input", e => {
+  if (e.target.value.trim() && currentView !== "browse") setView("browse");   // typing jumps to Browse
+  runSearch(e.target.value, document.getElementById("browse"));
+});
+
+/* ---- view toggle ---- */
+let currentView = "modules";
+function setView(v){
+  currentView = v;
+  const isPractice = v === "practice";
+  document.getElementById("modulesView").style.display = v === "modules" ? "" : "none";
+  document.getElementById("browse").style.display = v === "browse" ? "" : "none";
+  const pv = document.getElementById("practiceView");
+  pv.style.display = isPractice ? "" : "none";
+  pv.hidden = !isPractice;
+  document.getElementById("hubFootnote").style.display = isPractice ? "none" : "";
+  document.querySelector(".searchrow").style.display = isPractice ? "none" : "";
+  document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  if (isPractice) startPractice();
+}
+document.querySelectorAll("#viewSeg button").forEach(b => b.onclick = () => setView(b.dataset.view));
+
+/* ---- Practice mode (separate Q&A and Terms pools) ---- */
+let practiceKind = loadPref("sysdsg-hub-practice-kind", "qa"); // "qa" | "terms"
+if (practiceKind !== "qa" && practiceKind !== "terms") practiceKind = "qa";
+const PRACTICE = {
+  qa:    { pool: [], lastKey: null, seen: 0 },
+  terms: { pool: [], lastKey: null, seen: 0 }
+};
+
+function practiceState(){ return PRACTICE[practiceKind] || PRACTICE.qa; }
+
+function buildPracticePool(kind){
+  const k = kind || practiceKind;
+  const listKey = k === "terms" ? "terms" : "qa";
+  const st = PRACTICE[k];
+  st.pool = [];
+  INDEX.modules.forEach(m => {
+    (m[listKey] || []).forEach(it => {
+      st.pool.push({
+        dir: m.dir, id: it.id, type: listKey,
+        label: it.label, group: it.group || "",
+        emoji: m.emoji || "📚", title: m.title || m.dir,
+        key: listKey + "::" + m.dir + "::" + it.id
+      });
+    });
+  });
+}
+
+function updatePracticeChrome(){
+  const st = practiceState();
+  const label = practiceKind === "terms" ? "Terms" : "Q&A";
+  document.getElementById("practiceMeta").textContent =
+    st.pool.length
+      ? `${st.pool.length} ${label} across ${INDEX.modules.length} modules`
+      : `No ${label} found`;
+  document.querySelectorAll("#practiceKind button").forEach(b => {
+    b.classList.toggle("active", b.dataset.kind === practiceKind);
+  });
+  document.getElementById("practiceProgress").textContent =
+    st.pool.length ? `shown ${st.seen} · pool ${st.pool.length}` : "";
+}
+
+function pickPracticeItem(){
+  const st = practiceState();
+  if (!st.pool.length) return null;
+  if (st.pool.length === 1) return st.pool[0];
+  let pick;
+  do {
+    pick = st.pool[Math.floor(Math.random() * st.pool.length)];
+  } while (pick.key === st.lastKey);
+  return pick;
+}
+
+function practiceTermBody(e){
+  let h = "";
+  if (e.lede) h += `<p class="lede">${e.lede}</p>`;
+  if (e.what) h += `<h4>What</h4><div>${e.what}</div>`;
+  if (e.why)  h += `<h4>Why</h4><div>${e.why}</div>`;
+  if (e.apply)h += `<h4>How to apply</h4><div>${e.apply}</div>`;
+  if (e.code) h += `<h4>Code</h4><pre><code>${esc(e.code)}</code></pre>`;
+  if (Array.isArray(e.related) && e.related.length)
+    h += `<h4>Related</h4><div class="rel">${e.related.map(r=>`<span class="p">${esc(r)}</span>`).join("")}</div>`;
+  return h || "<p><em>No details written yet.</em></p>";
+}
+
+function practiceQaBody(e){
+  let h = e.answer || "<p><em>No answer written yet.</em></p>";
+  if (e.hint) h += `<div class="hint">💡 ${esc(e.hint)}</div>`;
+  return h;
+}
+
+async function showPracticeCard(item){
+  const card = document.getElementById("practiceCard");
+  const actions = document.getElementById("practiceActions");
+  const nextBtns = [document.getElementById("practiceNext"), document.getElementById("practiceNextTop")];
+  const setNextDisabled = (v) => nextBtns.forEach(b => { if (b) b.disabled = v; });
+  const kindLabel = practiceKind === "terms" ? "Terms" : "Q&A";
+  const st = practiceState();
+
+  if (!item){
+    card.innerHTML = `<p class="practice-empty">No ${kindLabel} available yet. Add some in the module apps, then hit Re-check.</p>`;
+    actions.style.display = "none";
+    setNextDisabled(false);
+    return;
+  }
+  setNextDisabled(true);
+  card.innerHTML = '<p class="practice-empty">Loading…</p>';
+  actions.style.display = "flex";
+  st.lastKey = item.key;
+
+  let d;
+  try {
+    const r = await fetch(`/__item__.json?m=${encodeURIComponent(item.dir)}&t=${item.type}&id=${encodeURIComponent(item.id)}`, {cache:"no-store"});
+    if (!r.ok) throw 0;
+    d = await r.json();
+  } catch (e) {
+    card.innerHTML = `<p class="practice-empty">Could not load this ${practiceKind === "terms" ? "term" : "Q&A"}. Try Next.</p>`;
+    setNextDisabled(false);
+    return;
+  }
+
+  const e = d.entry || {};
+  const group = e.group || item.group || "";
+  let title, body, revealLabel;
+  if (item.type === "terms"){
+    title = e.title || item.label || "Untitled term";
+    body = practiceTermBody(e);
+    revealLabel = "Reveal definition";
+  } else {
+    title = e.question || e.title || item.label || "Untitled question";
+    body = practiceQaBody(e);
+    revealLabel = "Reveal answer";
+  }
+  const plainTitle = String(title).replace(/<[^>]+>/g, "");
+
+  card.innerHTML = `
+    <div class="practice-mod">
+      <span class="chip">${esc(item.emoji)} ${esc(item.title)}</span>
+      <span class="chip">${item.type === "terms" ? "Term" : "Q&A"}</span>
+      ${group ? `<span class="chip">${esc(group)}</span>` : ""}
+    </div>
+    <h2 class="practice-q">${esc(plainTitle)}</h2>
+    <details class="practice-details">
+      <summary>${revealLabel}</summary>
+      <div class="practice-body">${body}</div>
+    </details>`;
+
+  document.getElementById("practiceOpen").href =
+    `module.html?m=${encodeURIComponent(item.dir)}${HASH[item.type](item.id)}`;
+  st.seen++;
+  document.getElementById("practiceProgress").textContent =
+    `shown ${st.seen} · pool ${st.pool.length}`;
+  setNextDisabled(false);
+}
+
+async function startPractice(resetSeen){
+  buildPracticePool("qa");
+  buildPracticePool("terms");
+  updatePracticeChrome();
+  const st = practiceState();
+  if (resetSeen !== false){ st.seen = 0; st.lastKey = null; }
+  await showPracticeCard(pickPracticeItem());
+}
+
+async function setPracticeKind(kind){
+  if (kind !== "qa" && kind !== "terms") return;
+  const changed = kind !== practiceKind;
+  practiceKind = kind;
+  savePref("sysdsg-hub-practice-kind", kind);
+  updatePracticeChrome();
+  if (changed) await showPracticeCard(pickPracticeItem());
+}
+
+async function practiceNext(){
+  await showPracticeCard(pickPracticeItem());
+}
+
+document.getElementById("practiceBack").onclick = () => setView("modules");
+document.getElementById("practiceNext").onclick = () => practiceNext();
+document.getElementById("practiceNextTop").onclick = () => practiceNext();
+document.querySelectorAll("#practiceKind button").forEach(b => {
+  b.onclick = () => setPracticeKind(b.dataset.kind);
+});
+
+/* ---- item popup ---- */
+const overlay = document.getElementById("overlay");
+function closeModal(){ overlay.classList.remove("open"); }
+overlay.addEventListener("click", e => { if (e.target === overlay) closeModal(); });
+document.getElementById("mClose").onclick = closeModal;
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape"){
+    if (overlay.classList.contains("open")){ closeModal(); return; }
+    if (currentView === "practice"){ setView("modules"); return; }
+    return;
+  }
+  if (currentView === "practice" && (e.key === "n" || e.key === "N" || e.key === "ArrowRight")){
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    e.preventDefault();
+    practiceNext();
+  }
+});
+
+function renderEntry(type, e){
+  if (type === "qa"){
+    let h = `<div class="qbox">${e.question||""}</div><div>${e.answer||""}</div>`;
+    if (e.hint) h += `<div class="hint">💡 ${esc(e.hint)}</div>`;
+    return h;
+  }
+  if (type === "topics"){
+    let h = `<h2>${esc(e.title||"")}</h2>`;
+    if (e.group) h += `<div class="chip">${esc(e.group)}</div>`;
+    if (e.summary) h += `<p class="lede">${esc(e.summary)}</p>`;
+    h += `<div>${e.content||""}</div>`;
+    return h;
+  }
+  // term
+  let h = `<h2>${esc(e.title||"")}</h2>`;
+  if (e.group) h += `<div class="chip">${esc(e.group)}</div>`;
+  if (e.lede) h += `<p class="lede">${e.lede}</p>`;
+  if (e.what) h += `<h4>What</h4><div>${e.what}</div>`;
+  if (e.why)  h += `<h4>Why</h4><div>${e.why}</div>`;
+  if (e.apply)h += `<h4>How to apply</h4><div>${e.apply}</div>`;
+  if (e.code) h += `<h4>Code</h4><pre><code>${esc(e.code)}</code></pre>`;
+  if (Array.isArray(e.related) && e.related.length)
+    h += `<h4>Related</h4><div class="rel">${e.related.map(r=>`<span class="p">${esc(r)}</span>`).join("")}</div>`;
+  return h;
+}
+async function openItem(ds){
+  document.getElementById("mBody").innerHTML = '<p class="lede">Loading…</p>';
+  document.getElementById("mhType").textContent = TYPE_ONE[ds.type] || ds.type;
+  overlay.classList.add("open");
+  let d;
+  try { const r = await fetch(`/__item__.json?m=${encodeURIComponent(ds.dir)}&t=${ds.type}&id=${encodeURIComponent(ds.id)}`, {cache:"no-store"});
+        if (!r.ok) throw 0; d = await r.json(); }
+  catch(e){ document.getElementById("mBody").innerHTML = '<p class="lede">Could not load this item.</p>'; return; }
+  document.getElementById("mhEmoji").textContent = d.module.emoji || "📚";
+  document.getElementById("mhMod").textContent = d.module.title;
+  document.getElementById("mBody").innerHTML = renderEntry(d.type, d.entry);
+  document.getElementById("mBody").scrollTop = 0;
+  document.getElementById("mOpen").href =
+    `module.html?m=${encodeURIComponent(ds.dir)}${HASH[ds.type](ds.id)}`;
+}
+// delegate clicks from tree + browse; let ctrl/cmd/middle-click open the module tab normally
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-item]");
+  if (!el) return;
+  if (e.metaKey || e.ctrlKey || e.button === 1) return;   // allow "open in new tab" from tree links
+  e.preventDefault();
+  openItem(el.dataset);
+});
+
+/* ---- module cards + liveness (unchanged) ---- */
+async function loadManifest(){ return (await fetch("hub.json", {cache:"no-store"})).json(); }
+function cardHTML(dir, m){
+  return `<a class="card" href="module.html?m=${encodeURIComponent(dir)}" target="_blank" rel="noopener">
+      <div class="top"><span class="ico">${m.emoji||"📚"}</span><span class="t">${esc(m.title)}</span></div>
+      <p class="d">${esc(m.sub||"")}</p>
+      <div class="foot"><span class="dot live"><i></i><span class="lbl">in Drive</span></span><span class="go">Open →</span></div>
+    </a>`;
+}
+async function renderCards(){
+  const status = document.getElementById("status"), cats = document.getElementById("cats");
+  let man;
+  try { man = await loadManifest(); } catch(e){ status.textContent = "sign in to load modules"; return; }
+  document.getElementById("tagline").textContent = man.tagline || document.getElementById("tagline").textContent;
+  cats.innerHTML = man.categories.map(c => `
+    <section class="cat"><div class="cat-head"><h2>${esc(c.name)}</h2><span class="blurb">${esc(c.blurb||"")}</span></div>
+      <div class="grid">${c.modules.map(dir => cardHTML(dir, man.modules[dir])).join("")}</div></section>`).join("");
+  const cards = [...document.querySelectorAll(".card")];
+  status.textContent = `${cards.length} modules`;
+}
+
+document.getElementById("refresh").onclick = async () => {
+  await loadIndex();
+  buildTree();
+  buildBrowse();
+  renderCards();
+  if (currentView === "practice") startPractice();
+};
+
+/* ---- boot ---- */
+(async function(){
+  await loadIndex();
+  buildTree();
+  buildBrowse();
+  renderCards();
+})();
+</script>
+<script type="module" src="app/hub-boot.js"></script>
+</body>
+</html>

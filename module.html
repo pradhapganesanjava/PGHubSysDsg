@@ -1,0 +1,3168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Bridge between the app's startup and the Drive-backed store.
+ *
+ * The application below is a classic (non-module) script, so it executes during
+ * parsing — before app/boot.js, which is a module and therefore deferred. Its
+ * first act is to fetch('/terms'), and on a static host that would 404 long
+ * before the store exists to answer it.
+ *
+ * So window.fetch is replaced up front with a version that parks every call.
+ * Once the store installs it calls __sysdsgInstall, the parked calls are
+ * replayed into it, and fetch behaves normally from then on. The app just
+ * experiences a slightly slow first request.
+ */
+(function () {
+  var native = window.fetch.bind(window);
+  var parked = [];
+  var handler = null;
+  window.__sysdsgInstall = function (fn) {
+    handler = fn;
+    var queued = parked.splice(0);
+    for (var i = 0; i < queued.length; i++) queued[i]();
+  };
+  window.fetch = function (input, init) {
+    if (handler) return handler(input, init);
+    return new Promise(function (resolve, reject) {
+      parked.push(function () { (handler || native)(input, init).then(resolve, reject); });
+    });
+  };
+})();
+</script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SysDsg Hub</title>
+<style>
+  /* ===== Dark (default) ===== */
+  :root, [data-theme="dark"] {
+    --bg: #0f1117;
+    --panel: #161922;
+    --panel-2: #1d2230;
+    --border: #2a2f3d;
+    --text: #e6e9ef;
+    --muted: #98a2b3;
+    --accent: #6ea8fe;
+    --accent-soft: #1e2a44;
+    --chip: #2a3550;
+    --code-bg: #0b0d13;
+    --code-text: #c8d3f5;
+    --accent-ink: #0b0d13;
+  }
+
+  /* ===== Moonlight ===== */
+  [data-theme="moonlight"] {
+    --bg: #0b1023; --panel: #121833; --panel-2: #1a2244; --border: #27305a;
+    --text: #dfe4ff; --muted: #8e98c9; --accent: #8b9dff; --accent-soft: #1f2a55;
+    --chip: #26305c; --code-bg: #080c1c; --code-text: #aeb8ff; --accent-ink: #0b1023;
+  }
+
+  /* ===== Gray ===== */
+  [data-theme="gray"] {
+    --bg: #2b2f36; --panel: #33383f; --panel-2: #3c424a; --border: #4a5159;
+    --text: #e7e9ec; --muted: #a7aeb6; --accent: #9fb0c0; --accent-soft: #3f4651;
+    --chip: #444b54; --code-bg: #23272d; --code-text: #cdd3da; --accent-ink: #1b1e23;
+  }
+
+  /* ===== Soft ===== */
+  [data-theme="soft"] {
+    --bg: #f6f4f1; --panel: #fffdfb; --panel-2: #f0ebe5; --border: #e6ded6;
+    --text: #4b4658; --muted: #9b93a3; --accent: #9d8ec2; --accent-soft: #ece7f5;
+    --chip: #ece6f1; --code-bg: #f4efea; --code-text: #6f6678; --accent-ink: #ffffff;
+  }
+
+  /* ===== White ===== */
+  [data-theme="white"] {
+    --bg: #ffffff; --panel: #f7f8fa; --panel-2: #eef1f6; --border: #dfe3ea;
+    --text: #1a1d24; --muted: #667085; --accent: #2563eb; --accent-soft: #e5edff;
+    --chip: #e8edf7; --code-bg: #f3f5f9; --code-text: #334155; --accent-ink: #ffffff;
+  }
+
+  /* ===== Colorful ===== */
+  [data-theme="colorful"] {
+    --bg: #fef6ff; --panel: #ffffff; --panel-2: #fbeeff; --border: #f0d7f5;
+    --text: #2a1b33; --muted: #8a6f93; --accent: #e0179d; --accent-soft: #ffe1f4;
+    --chip: #ffe6f7; --code-bg: #2a1b33; --code-text: #ffd6f0; --accent-ink: #ffffff;
+  }
+
+  /* ===== Cartoon ===== */
+  [data-theme="cartoon"] {
+    --bg: #fffbe7; --panel: #ffffff; --panel-2: #fff3c4; --border: #1a1a1a;
+    --text: #1a1a1a; --muted: #7a6f3a; --accent: #ff5c8a; --accent-soft: #ffe0ea;
+    --chip: #ffe9a8; --code-bg: #1a1a1a; --code-text: #ffe27a; --accent-ink: #1a1a1a;
+  }
+  [data-theme="cartoon"] .box { border-width: 2px; box-shadow: 3px 3px 0 var(--border); }
+  [data-theme="cartoon"] .box:hover { box-shadow: 5px 5px 0 var(--accent); }
+  [data-theme="cartoon"] .tab-btn.active,
+  [data-theme="cartoon"] #drawer { box-shadow: -3px 0 0 rgba(0,0,0,.15); }
+  [data-theme="cartoon"] .tag-chip,
+  [data-theme="cartoon"] .related .pill { border: 2px solid var(--border); }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header .logo {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #b692ff);
+    display: grid; place-items: center; font-weight: 700; color: var(--accent-ink);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+
+  /* Top tabs */
+  .tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 10px; border: 1px solid var(--border); }
+  .tab-btn {
+    border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+  /* Theme picker */
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .theme-select {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; font-size: 13px; font-weight: 600; cursor: pointer; outline: none;
+  }
+  .theme-select:focus { border-color: var(--accent); }
+
+  .layout { display: flex; flex: 1; min-height: 0; }
+  .nav-toggle { height: 34px; }
+  .layout.nav-closed > aside:not(#drawer) { display: none; }
+
+  /* Sidebar */
+  aside {
+    width: 300px; min-width: 300px;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+    display: flex; flex-direction: column;
+  }
+  .nav-head { padding: 14px 16px 8px; }
+  .nav-head .title { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 10px; }
+  .nav-tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 9px; border: 1px solid var(--border); margin-bottom: 10px; }
+  .nav-tabs button { flex: 1; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 7px 0; border-radius: 6px; font-size: 13px; font-weight: 600; }
+  .nav-tabs button.active { background: var(--accent); color: var(--accent-ink); }
+  .search {
+    width: 100%; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font-size: 13px; outline: none; margin-bottom: 10px;
+  }
+  .search:focus { border-color: var(--accent); }
+
+  .search-row { display: flex; gap: 6px; align-items: stretch; margin-bottom: 10px; }
+  .search-row .search { margin-bottom: 0; flex: 1; }
+  .view-toggle { display: flex; gap: 3px; background: var(--panel-2); padding: 3px; border-radius: 8px; border: 1px solid var(--border); flex: none; }
+  .view-toggle button {
+    border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    width: 30px; padding: 0; border-radius: 6px; display: grid; place-items: center;
+  }
+  .view-toggle button svg, .icon-btn svg { display: block; }
+  .view-toggle button.active { background: var(--accent); color: var(--accent-ink); }
+  .icon-btn {
+    flex: none; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+    width: 34px; height: 34px; border-radius: 8px; cursor: pointer; display: grid; place-items: center;
+    text-decoration: none; box-sizing: border-box;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  nav { overflow-y: auto; padding: 6px 8px 24px; flex: 1; }
+
+  .group { margin-bottom: 4px; }
+  .group-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; user-select: none;
+    color: var(--text); font-weight: 600; font-size: 13px;
+  }
+  .group-head:hover { background: var(--panel-2); }
+  .group-head .caret { transition: transform .15s ease; color: var(--muted); font-size: 11px; width: 12px; }
+  .group.collapsed .caret { transform: rotate(-90deg); }
+  .group-head .count { margin-left: auto; font-size: 11px; color: var(--muted); background: var(--chip); padding: 1px 7px; border-radius: 10px; }
+  .group-items { padding-left: 8px; }
+  .group.collapsed .group-items { display: none; }
+
+  .term {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px 7px 22px; border-radius: 7px; cursor: pointer;
+    color: var(--muted); font-size: 13px; position: relative;
+  }
+  .term:hover { background: var(--panel-2); color: var(--text); }
+  .term.active { background: var(--accent-soft); color: #fff; }
+  .term.active::before {
+    content: ""; position: absolute; left: 8px; top: 8px; bottom: 8px;
+    width: 3px; border-radius: 3px; background: var(--accent);
+  }
+  .term.hidden, .group.hidden { display: none; }
+
+  /* Docs sidebar: untagged docs sit above the tag tree as a flat list */
+  .untagged-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px;
+    font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .untagged-head .count { margin-left: auto; font-size: 11px; letter-spacing: 0; text-transform: none;
+    color: var(--muted); background: var(--chip); padding: 1px 7px; border-radius: 10px; }
+  .group.untagged { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px; }
+  .group.untagged .term { padding-left: 14px; }
+  /* rename / delete affordances on a tag group header */
+  .group-head .tag-act { opacity: 0; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; font-size: 12px; padding: 0 3px; border-radius: 5px; }
+  .group-head:hover .tag-act { opacity: 1; }
+  .group-head .tag-act:hover { color: var(--accent); background: var(--chip); }
+  .group-head .count + .tag-act { margin-left: 2px; }
+
+  /* Docs detail: the tag bar above a doc */
+  .doc-tagbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .doc-tagbar .tag-chip { cursor: pointer; }
+  .doc-tagbar .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .doc-tagbar .doc-label { font-size: 11.5px; color: var(--muted); background: var(--chip);
+    border-radius: 10px; padding: 1px 9px; }
+  .doc-tagbar .spacer { margin-left: auto; }
+  .doc-tagedit { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; }
+  .doc-tagedit input { flex: 1 1 220px; min-width: 160px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 13px; font-family: inherit; }
+  .doc-tagedit input:focus { outline: none; border-color: var(--accent); }
+
+  /* flat-list mode: the single flat group hides its header */
+  nav.flat .group-head { display: none; }
+  nav.flat .group.untagged { border-bottom: 0; padding-bottom: 0; margin-bottom: 4px; }
+  nav.flat .group-items { padding-left: 0; }
+  nav.flat .term { padding-left: 14px; }
+
+  /* Detail pane (Glossary tab) */
+  main { flex: 1; overflow-y: auto; padding: 36px 48px 80px; }
+  .detail { max-width: 820px; }
+  /* embedded PDF viewer (docs that are .pdf files) */
+  .detail:has(.pdf-view) { max-width: 1100px; }
+  .pdf-view { display: flex; flex-direction: column; }
+  .pdf-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-bottom: 12px; font-size: 14px; }
+  .pdf-bar .pdf-name { font-weight: 650; color: var(--text); }
+  .pdf-bar a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .pdf-bar a:hover { text-decoration: underline; }
+  .pdf-frame { width: 100%; height: calc(100vh - 180px); min-height: 480px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .crumbs { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .tag-chip {
+    display: inline-block; background: var(--chip); color: var(--accent);
+    padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  }
+  h2.term-title { font-size: 30px; margin: 6px 0 4px; letter-spacing: -.4px; }
+  .lede { font-size: 16px; color: var(--muted); line-height: 1.6; margin: 0 0 26px; }
+
+  .section { margin-bottom: 24px; }
+  .section h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--accent); margin: 0 0 8px;
+  }
+  .section p, .section li { line-height: 1.65; font-size: 15px; color: var(--text); }
+  .section ul { margin: 0; padding-left: 20px; }
+  .section li { margin-bottom: 6px; }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 0;
+  }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; color: var(--code-text); }
+  p code, li code { background: var(--code-bg); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); }
+
+  .related { display: flex; flex-wrap: wrap; gap: 8px; }
+  .related .pill {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    padding: 5px 12px; border-radius: 20px; font-size: 13px; cursor: pointer;
+  }
+  .related .pill:hover { border-color: var(--accent); color: var(--text); }
+
+  /* Notes (rich text) */
+  .note-toolbar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .note-btn {
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    min-width: 30px; height: 30px; padding: 0 8px; border-radius: 7px; cursor: pointer;
+    font-size: 13px; font-weight: 600; line-height: 1;
+  }
+  .note-btn:hover { border-color: var(--accent); }
+  .note-btn.muted { color: var(--muted); }
+  .note-editor {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 10px;
+    min-height: 120px; padding: 12px 14px; font-size: 14px; line-height: 1.6;
+    color: var(--text); outline: none;
+  }
+  .note-editor:focus { border-color: var(--accent); }
+  .note-editor:empty:before { content: attr(data-placeholder); color: var(--muted); }
+  .note-editor img { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
+  .note-editor h4 { margin: 10px 0 6px; font-size: 16px; }
+  .note-editor a { color: var(--accent); }
+  .note-sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
+  .note-editor pre, .note-view pre, .rich pre {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin: 8px 0; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5;
+  }
+  .note-editor code, .note-view code, .rich code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px;
+  }
+  .note-editor pre code, .note-view pre code, .rich pre code { background: none; border: 0; padding: 0; }
+  .note-editor blockquote, .note-view blockquote, .rich blockquote {
+    margin: 8px 0; padding: 4px 14px; border-left: 3px solid var(--accent); color: var(--muted); font-style: italic;
+  }
+  .note-editor h3, .note-view h3, .rich h3 { margin: 12px 0 6px; font-size: 18px; }
+  .note-editor hr, .note-view hr, .rich hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+  .note-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .note-hint b { color: var(--accent); font-weight: 600; }
+  .notes-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .notes-head h3 { margin: 0; }
+  .notes-actions { display: flex; gap: 6px; }
+  .note-action {
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    padding: 5px 12px; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .note-action:hover { border-color: var(--accent); color: var(--accent); }
+  .note-action.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .note-action.primary:hover { color: var(--accent-ink); filter: brightness(1.05); }
+  .note-view {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 10px;
+    padding: 12px 14px; font-size: 14px; line-height: 1.6; min-height: 46px; color: var(--text);
+  }
+  .note-view img { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
+  .note-view h4 { margin: 10px 0 6px; font-size: 16px; }
+  .note-view a { color: var(--accent); }
+  .note-view .empty-note { color: var(--muted); }
+  .rich { line-height: 1.65; font-size: 15px; }
+  .rich img { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
+  .rich h4 { margin: 10px 0 6px; font-size: 16px; }
+  .rich a { color: var(--accent); }
+  .rich table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+  .rich th, .rich td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+  .rich th { background: var(--panel-2); color: var(--text); font-weight: 600; }
+  .rich pre { margin: 8px 0; }
+  .term-actions { display: flex; gap: 8px; margin: -2px 0 20px; }
+  .term-actions .danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
+
+  /* Add-term button */
+  .add-term-btn {
+    width: 100%; margin-top: 10px; border: 1px dashed var(--accent); background: transparent;
+    color: var(--accent); padding: 8px 0; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 600;
+  }
+  .add-term-btn:hover { background: var(--accent-soft); }
+  .add-term-btn.inline { width: auto; padding: 8px 16px; margin: 0 0 24px 0; }
+
+  /* Add-term modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    width: 640px; max-width: 100%; max-height: 90vh; display: flex; flex-direction: column;
+  }
+  .modal-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .modal-head h3 { margin: 0; font-size: 17px; }
+  .modal-head .drawer-close { margin-left: auto; }
+  .modal-body { padding: 18px 20px; overflow-y: auto; }
+  .modal-body label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+  .modal-body .field { margin-bottom: 16px; }
+  .modal-body input[type=text], .modal-body textarea {
+    width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 14px; outline: none; font-family: inherit;
+  }
+  .modal-body input[type=text]:focus, .modal-body textarea:focus { border-color: var(--accent); }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
+
+  /* Terms overview (Terms tab) */
+  #overview { flex: 1; overflow-y: auto; padding: 30px 40px 80px; display: none; }
+  #overview.show { display: block; }
+  .ov-head h2 { margin: 0 0 4px; font-size: 24px; }
+  .ov-head p { margin: 0 0 26px; color: var(--muted); font-size: 14px; }
+  .ov-group { margin-bottom: 34px; }
+  .ov-group-title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ov-group-title .name { font-size: 15px; font-weight: 650; }
+  .ov-group-title .count { font-size: 11px; color: var(--muted); background: var(--chip); padding: 2px 8px; border-radius: 10px; }
+  .ov-group.ov-nested { margin-bottom: 18px; border-left: 2px solid var(--border); padding-left: 14px; }
+  .ov-group.ov-nested .ov-group-title .name { font-size: 13.5px; color: var(--muted); }
+  .boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+  .box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; cursor: pointer; transition: border-color .15s, transform .1s, background .15s;
+  }
+  .box:hover { border-color: var(--accent); background: var(--panel-2); transform: translateY(-2px); }
+  .box .b-title { font-weight: 650; font-size: 15px; margin-bottom: 4px; }
+  .box .b-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+
+  /* Overview view toggle + Wall view */
+  .ov-toggle { display: inline-flex; gap: 4px; background: var(--panel-2); padding: 3px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 24px; }
+  .ov-toggle button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+  .ov-toggle button.active { background: var(--accent); color: var(--accent-ink); }
+  .ov-wall { display: none; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 10px 12px; max-width: 880px; margin: 0 auto; padding-bottom: 70px; }
+  .chip-term {
+    border: 1.5px solid var(--border); background: var(--panel); border-radius: 999px;
+    padding: 9px 18px; cursor: pointer; font-weight: 600; line-height: 1;
+    transition: transform .12s ease, background .15s, box-shadow .15s;
+  }
+  .chip-term:hover { transform: scale(1.08); background: var(--panel-2); box-shadow: 0 5px 16px rgba(0,0,0,.28); }
+
+  /* Globe view */
+  .ov-globe { display: none; position: relative; width: 100%; max-width: 900px; height: 560px; margin: 0 auto; }
+  .globe-chip {
+    position: absolute; left: 0; top: 0; white-space: nowrap;
+    border: 1.5px solid var(--border); background: var(--panel); border-radius: 999px;
+    padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    will-change: transform, opacity; user-select: none;
+  }
+  .globe-chip:hover { background: var(--panel-2); }
+  .globe-controls { display: none; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px; margin: 18px auto 0; }
+  .gc-btn {
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    width: 40px; height: 38px; border-radius: 9px; cursor: pointer;
+    font-size: 14px; font-weight: 700; line-height: 1; display: grid; place-items: center;
+    user-select: none; touch-action: none;
+  }
+  .gc-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .gc-btn:active { background: var(--accent); color: var(--accent-ink); }
+  .gc-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+  /* Search view */
+  #search-view { flex: 1; overflow-y: auto; padding: 26px 40px 80px; display: none; }
+  #search-view.show { display: block; }
+  .sv-head { max-width: 820px; margin: 0 auto 16px; }
+  #search-input {
+    width: 100%; padding: 12px 14px; font-size: 15px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); outline: none;
+  }
+  #search-input:focus { border-color: var(--accent); }
+  .sv-summary { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .sv-summary b { color: var(--text); }
+  #search-results { max-width: 820px; margin: 0 auto; }
+  .sr-hit { border: 1px solid var(--border); background: var(--panel); border-radius: 10px; padding: 11px 14px; margin-bottom: 10px; cursor: pointer; }
+  .sr-hit:hover { border-color: var(--accent); }
+  .sr-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .sr-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 2px 7px; border-radius: 20px; background: var(--chip); color: var(--accent); }
+  .sr-title { font-weight: 650; font-size: 14px; }
+  .sr-field { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .sr-snippet { font-size: 13.5px; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
+  .sr-snippet mark { background: var(--accent); color: var(--accent-ink); border-radius: 3px; padding: 0 2px; }
+  #search-more { max-width: 820px; margin: 6px auto 0; text-align: center; }
+  .sr-more-btn { border: 1px solid var(--border); background: var(--panel-2); color: var(--text); padding: 9px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .sr-more-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .sr-empty { color: var(--muted); max-width: 820px; margin: 0 auto; }
+
+  /* Docs (rendered in the main pane, listed in the Terms/QA/Docs sidebar) */
+  .nav-empty { color: var(--muted); font-size: 12.5px; padding: 8px 10px; line-height: 1.5; }
+  .markdown-body { max-width: 820px; color: var(--text); font-size: 15px; line-height: 1.7; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3,
+  .markdown-body h4, .markdown-body h5, .markdown-body h6 { line-height: 1.3; margin: 1.5em 0 .5em; font-weight: 700; }
+  .markdown-body h1 { font-size: 28px; margin-top: 0; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+  .markdown-body h2 { font-size: 22px; padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+  .markdown-body h3 { font-size: 18px; }
+  .markdown-body h4 { font-size: 15.5px; }
+  .markdown-body p { margin: 0 0 1em; }
+  .markdown-body a { color: var(--accent); text-decoration: none; }
+  .markdown-body a:hover { text-decoration: underline; }
+  .markdown-body ul, .markdown-body ol { margin: 0 0 1em; padding-left: 1.6em; }
+  .markdown-body li { margin: .25em 0; }
+  .markdown-body blockquote { margin: 0 0 1em; padding: .4em 1em; border-left: 3px solid var(--accent); background: var(--panel-2); color: var(--muted); border-radius: 0 6px 6px 0; }
+  .markdown-body code { background: var(--code-bg); color: var(--code-text); padding: .12em .4em; border-radius: 4px; font-size: .88em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .markdown-body pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 0 0 1em; }
+  .markdown-body pre code { background: none; padding: 0; color: var(--code-text); font-size: 13px; line-height: 1.55; }
+  /* mermaid diagrams: while unrendered they show as source in the code box; once rendered, drop the box */
+  .markdown-body pre.mermaid { text-align: center; }
+  .markdown-body pre.mermaid.mermaid-rendered { background: transparent; border: none; padding: 4px 0; }
+  .markdown-body pre.mermaid svg { max-width: 100%; height: auto; }
+  .markdown-body pre.mermaid.mermaid-error { color: var(--code-text); text-align: left; }
+  .markdown-body hr { border: 0; border-top: 1px solid var(--border); margin: 1.6em 0; }
+  .markdown-body img { max-width: 100%; border-radius: 6px; }
+  .markdown-body table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 14px; display: block; overflow-x: auto; }
+  .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 7px 11px; text-align: left; }
+  .markdown-body th { background: var(--panel-2); font-weight: 650; }
+  .markdown-body [data-line] { scroll-margin-top: 20px; }
+  .doc-flash { animation: docFlash 2s ease-out; border-radius: 6px; }
+  @keyframes docFlash { 0%, 40% { background: var(--accent-soft); } 100% { background: transparent; } }
+  .markdown-body mark.doc-hit { background: var(--accent); color: var(--accent-ink); border-radius: 3px; padding: 0 2px; }
+
+  /* ---- Link quick-view (hover the eye icon next to a code/file link) ---- */
+  .lp-icon {
+    display: inline-block; margin-left: 5px; cursor: pointer; user-select: none;
+    font-size: 12px; line-height: 1; opacity: .55; vertical-align: baseline;
+    border: 1px solid var(--border); border-radius: 5px; padding: 2px 4px;
+    background: var(--panel-2); text-decoration: none;
+  }
+  .lp-icon:hover { opacity: 1; border-color: var(--accent); }
+  .lp-pop {
+    position: fixed; z-index: 90; display: none;
+    width: min(620px, 92vw); max-height: 60vh; overflow: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 12px 34px rgba(0,0,0,.38); padding: 0;
+  }
+  .lp-pop.show { display: block; }
+  .lp-head {
+    position: sticky; top: 0; background: var(--panel-2);
+    border-bottom: 1px solid var(--border); padding: 7px 11px;
+    font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center;
+    border-radius: 10px 10px 0 0;
+  }
+  .lp-head .lp-name { color: var(--text); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lp-head .lp-open { margin-left: auto; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .lp-body { padding: 10px 14px; font-size: 13px; line-height: 1.6; color: var(--text); }
+  .lp-body pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+  .lp-body table { border-collapse: collapse; width: 100%; font-size: 12px; display: block; overflow-x: auto; }
+  .lp-body th, .lp-body td { border: 1px solid var(--border); padding: 4px 7px; text-align: left; }
+  .lp-body img { max-width: 100%; }
+  .lp-body h1 { font-size: 17px; } .lp-body h2 { font-size: 15px; } .lp-body h3 { font-size: 14px; }
+  .lp-fade { color: var(--muted); font-size: 12px; border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 6px; }
+
+  /* Quick-peek tooltip */
+  #tooltip {
+    position: fixed; z-index: 60; max-width: 300px; pointer-events: none;
+    background: var(--panel-2); border: 1px solid var(--accent); border-radius: 10px;
+    padding: 10px 12px; font-size: 12.5px; line-height: 1.5; color: var(--text);
+    box-shadow: 0 12px 30px rgba(0,0,0,.5); opacity: 0; transition: opacity .12s; display: none;
+  }
+  #tooltip .tt-title { font-weight: 700; margin-bottom: 4px; color: var(--accent); }
+
+  /* Slide-over drawer */
+  #backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 80;
+    opacity: 0; visibility: hidden; transition: opacity .2s;
+  }
+  #backdrop.open { opacity: 1; visibility: visible; }
+  #drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: 560px; max-width: 92vw;
+    background: var(--panel); border-left: 1px solid var(--border); z-index: 90;
+    transform: translateX(100%); transition: transform .26s cubic-bezier(.22,.61,.36,1);
+    display: flex; flex-direction: column;
+  }
+  #drawer.open { transform: translateX(0); }
+  .drawer-head {
+    display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .drawer-head .tag-chip { margin-right: auto; }
+  .drawer-close {
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+    width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;
+  }
+  .drawer-close:hover { color: var(--text); border-color: var(--accent); }
+  .drawer-body { overflow-y: auto; padding: 22px 24px 50px; }
+  .drawer-body h2.term-title { font-size: 24px; margin-top: 0; }
+  /* Floating hub-home button */
+  #hub-home{ position:fixed; left:18px; bottom:18px; z-index:9999; width:44px; height:44px;
+    border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px;
+    text-decoration:none; background:var(--panel); border:1px solid var(--border); color:var(--text);
+    box-shadow:0 4px 16px rgba(0,0,0,.28); transition:transform .15s, border-color .15s, box-shadow .15s; }
+  #hub-home:hover{ transform:translateY(-2px) scale(1.06); border-color:var(--accent);
+    box-shadow:0 8px 22px -6px var(--accent); }
+  /* ===== authored content helpers (terms/qa/topics) — shared by module apps and hub preview ===== */
+  .tag { display:inline-block;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);background:var(--accent-soft);border:1px solid var(--border);border-radius:6px;padding:1px 7px;margin-right:8px;vertical-align:middle; }
+  .note { background:var(--panel-2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:10px 13px;margin:12px 0; }
+  .chips { display:flex;flex-wrap:wrap;gap:6px;margin:10px 0; }
+  .chip { font-size:.78rem;background:var(--panel-2);border:1px solid var(--border);border-radius:20px;padding:2px 10px;color:var(--text); }
+  .scale { display:flex;align-items:stretch;gap:10px;margin:12px 0;flex-wrap:wrap; }
+  .scale .pan { flex:1 1 200px; }
+  .pan { background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px; }
+  .pan h4 { margin:0 0 4px;font-size:.85rem;color:var(--accent); }
+  .vs { display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;padding:0 4px; }
+  .callout { background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:12px 15px;margin:14px 0; }
+  .callout h2 { margin:0 0 6px;font-size:1rem; }
+  .callout.tradeoff { border-left:3px solid #e0803a; }
+  .proscons { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:12px 0; }
+  .proscons h3 { margin:0 0 4px;font-size:.9rem; }
+  .proscons ul { margin:0;padding-left:1.1em; }
+  .ah { font-weight:700;margin:14px 0 4px; }
+  .tight { margin:4px 0;padding-left:1.2em; }
+  .tight li { margin:1px 0; }
+  .tldr { background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin:0 0 12px; }
+  .flow { white-space:pre;font-family:ui-monospace,Menlo,monospace;font-size:.8rem;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto; }
+  .diagram { background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 10px;margin:10px 0 6px; overflow-x:auto; }
+  .diagram svg { display:block; max-width:100%; height:auto; color:var(--text); }
+  .diagram-cap { color:var(--text); font-size:.9rem; line-height:1.5; margin:0 0 14px; }
+  .diagram-cap strong { color:var(--text); }
+</style>
+<style id="hl-tokens">
+  .tok-kw  { color: #cc7832; font-weight: 600; }
+  .tok-str { color: #98c379; }
+  .tok-com { color: #7f848e; font-style: italic; }
+  .tok-num { color: #6cb6ff; }
+  .tok-ann { color: #d0b344; }
+  .tok-cls { color: #4ec9b0; }
+  [data-theme="soft"] .tok-kw, [data-theme="white"] .tok-kw, [data-theme="colorful"] .tok-kw, [data-theme="cartoon"] .tok-kw { color: #7f0055; font-weight: 700; }
+  [data-theme="soft"] .tok-str, [data-theme="white"] .tok-str, [data-theme="colorful"] .tok-str, [data-theme="cartoon"] .tok-str { color: #2a00ff; }
+  [data-theme="soft"] .tok-com, [data-theme="white"] .tok-com, [data-theme="colorful"] .tok-com, [data-theme="cartoon"] .tok-com { color: #3f7f5f; }
+  [data-theme="soft"] .tok-num, [data-theme="white"] .tok-num, [data-theme="colorful"] .tok-num, [data-theme="cartoon"] .tok-num { color: #1750eb; }
+  [data-theme="soft"] .tok-ann, [data-theme="white"] .tok-ann, [data-theme="colorful"] .tok-ann, [data-theme="cartoon"] .tok-ann { color: #646464; }
+  [data-theme="soft"] .tok-cls, [data-theme="white"] .tok-cls, [data-theme="colorful"] .tok-cls, [data-theme="cartoon"] .tok-cls { color: #267f99; }
+</style>
+</head>
+<body>
+  <header>
+    <a id="hub-home-btn" class="icon-btn" href="./" title="Back to System Design Hub" aria-label="Back to System Design Hub">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7.5L8 2.5l6 5"/><path d="M3.5 6.5V13h9V6.5"/></svg>
+    </a>
+    <button id="nav-toggle" class="icon-btn nav-toggle" title="Show / hide navigation">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+    </button>
+    <div class="logo" id="mod-emoji"></div>
+    <div>
+      <h1 id="mod-title"></h1>
+      <div class="sub" id="mod-sub"></div>
+    </div>
+    <div class="header-right">
+      <div class="tabs">
+        <button class="tab-btn" data-tab="terms">Terms</button>
+        <button class="tab-btn" data-tab="qa">QA</button>
+        <button class="tab-btn" data-tab="topics">Topic</button>
+        <button class="tab-btn" data-tab="docs">Docs</button>
+        <button class="tab-btn" data-tab="search">Search</button>
+      </div>
+      <select id="theme" class="theme-select" aria-label="Theme">
+        <option value="dark">🌙 Dark</option>
+        <option value="moonlight">🌌 Moonlight</option>
+        <option value="gray">🌫️ Gray</option>
+        <option value="soft">🪶 Soft</option>
+        <option value="white">☀️ White</option>
+        <option value="colorful">🎨 Colorful</option>
+        <option value="cartoon">🦄 Cartoon</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="nav-head">
+        <div class="nav-tabs">
+          <button id="navtab-terms" class="active">Terms</button>
+          <button id="navtab-qa">QA</button>
+          <button id="navtab-topics">Topic</button>
+          <button id="navtab-docs">Docs</button>
+        </div>
+        <div class="search-row">
+          <input id="search" class="search" type="text" placeholder="Filter terms…" autocomplete="off" />
+          <div class="view-toggle">
+            <button id="btn-tree" class="active" title="Tree view">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="6" height="2" rx="1"/><rect x="6" y="7" width="9" height="2" rx="1"/><rect x="6" y="11.5" width="9" height="2" rx="1"/></svg>
+            </button>
+            <button id="btn-flat" title="Flat list">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="11.5" width="14" height="2" rx="1"/></svg>
+            </button>
+          </div>
+          <button id="btn-collapse" class="icon-btn" title="Collapse / expand all">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l4-4 4 4M4 13l4-4 4 4"/></svg>
+          </button>
+        </div>
+        <button id="add-term-btn" class="add-term-btn">&#43; Add term</button>
+      </div>
+      <nav id="nav"></nav>
+    </aside>
+
+    <main id="main">
+      <div id="detail" class="detail"></div>
+    </main>
+
+    <div id="overview">
+      <div class="ov-head">
+        <h2>All Terms</h2>
+        <p>Hover for a quick peek; click to open full details.</p>
+        <div class="ov-toggle">
+          <button id="ovb-grouped" class="active">Grouped</button>
+          <button id="ovb-wall">Wall</button>
+          <button id="ovb-globe">Globe</button>
+        </div>
+        <button id="add-term-btn2" class="add-term-btn inline">&#43; Add term</button>
+      </div>
+      <div id="ov-groups"></div>
+      <div id="ov-wall" class="ov-wall"></div>
+      <div id="ov-globe" class="ov-globe"></div>
+      <div id="globe-controls" class="globe-controls">
+        <button class="gc-btn" data-dir="up" title="Rotate up">&#9650;</button>
+        <button class="gc-btn" data-dir="left" title="Rotate left">&#9664;</button>
+        <button class="gc-btn" data-act="play" title="Pause / play auto-spin">&#10073;&#10073;</button>
+        <button class="gc-btn" data-dir="right" title="Rotate right">&#9654;</button>
+        <button class="gc-btn" data-dir="down" title="Rotate down">&#9660;</button>
+        <span class="gc-sep"></span>
+        <button class="gc-btn" data-act="zoomout" title="Zoom out">&#8722;</button>
+        <button class="gc-btn" data-act="zoomin" title="Zoom in">+</button>
+        <button class="gc-btn" data-act="reset" title="Reset view">&#8634;</button>
+      </div>
+    </div>
+
+    <div id="search-view">
+      <div class="sv-head">
+        <input id="search-input" type="text" placeholder="Search all Terms &amp; QA content…" autocomplete="off" />
+        <div id="search-summary" class="sv-summary"></div>
+      </div>
+      <div id="search-results"></div>
+      <div id="search-more"></div>
+    </div>
+  </div>
+
+  <div id="term-modal" class="modal-bg">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Add a term</h3>
+        <button class="drawer-close" id="nt-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="nt-title">Title</label>
+          <input id="nt-title" type="text" placeholder="e.g. Guardrails" />
+        </div>
+        <div class="field">
+          <label for="nt-group">Tag / Group</label>
+          <input id="nt-group" type="text" list="nt-grouplist" placeholder="e.g. Reliability  or  Reliability::Retries (use :: to nest)" />
+          <datalist id="nt-grouplist"></datalist>
+        </div>
+        <div class="field">
+          <label for="nt-lede">Summary (one line)</label>
+          <textarea id="nt-lede" rows="2" placeholder="A short summary shown at the top and in tooltips."></textarea>
+        </div>
+        <div class="field">
+          <label>Details</label>
+          <div class="note-toolbar" id="nt-toolbar">
+            <button class="note-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+            <button class="note-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+            <button class="note-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+            <button class="note-btn" data-cmd="formatBlock" title="Heading">H</button>
+            <button class="note-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull;</button>
+            <button class="note-btn" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+            <button class="note-btn" data-cmd="createLink" title="Insert link">&#128279;</button>
+            <button class="note-btn" data-act="image" title="Insert image from file">&#128247;</button>
+            <button class="note-btn muted" data-act="clear" title="Clear">&#128465;</button>
+          </div>
+          <div class="note-editor" id="nt-editor" contenteditable="true"
+               data-placeholder="Describe the term… paste images (Ctrl/&#8984;+V) to embed them."></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="note-action" id="nt-cancel">Cancel</button>
+        <button class="note-action primary" id="nt-create">Create term</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="qa-modal" class="modal-bg">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Add a Q&amp;A</h3>
+        <button class="drawer-close" id="qa-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Question</label>
+          <div class="note-toolbar" id="qa-q-toolbar">
+            <button class="note-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+            <button class="note-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+            <button class="note-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+            <button class="note-btn" data-cmd="formatBlock" title="Heading">H</button>
+            <button class="note-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull;</button>
+            <button class="note-btn" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+            <button class="note-btn" data-cmd="createLink" title="Insert link">&#128279;</button>
+            <button class="note-btn" data-act="image" title="Insert image from file">&#128247;</button>
+            <button class="note-btn muted" data-act="clear" title="Clear">&#128465;</button>
+          </div>
+          <div class="note-editor" id="qa-q-editor" contenteditable="true"
+               data-placeholder="Write the question… paste images (Ctrl/&#8984;+V)."></div>
+        </div>
+        <div class="field">
+          <label>Answer</label>
+          <div class="note-toolbar" id="qa-a-toolbar">
+            <button class="note-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+            <button class="note-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+            <button class="note-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+            <button class="note-btn" data-cmd="formatBlock" title="Heading">H</button>
+            <button class="note-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull;</button>
+            <button class="note-btn" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+            <button class="note-btn" data-cmd="createLink" title="Insert link">&#128279;</button>
+            <button class="note-btn" data-act="image" title="Insert image from file">&#128247;</button>
+            <button class="note-btn muted" data-act="clear" title="Clear">&#128465;</button>
+          </div>
+          <div class="note-editor" id="qa-a-editor" contenteditable="true"
+               data-placeholder="Write the answer… paste images (Ctrl/&#8984;+V)."></div>
+        </div>
+        <div class="field">
+          <label for="qa-group">Tags</label>
+          <input id="qa-group" type="text" list="qa-grouplist" placeholder="e.g. Interview  or  Interview::Reliability (use :: to nest)" />
+          <datalist id="qa-grouplist"></datalist>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="note-action" id="qa-cancel">Cancel</button>
+        <button class="note-action primary" id="qa-create">Create Q&amp;A</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="topic-modal" class="modal-bg">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Add a Topic</h3>
+        <button class="drawer-close" id="topic-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="topic-title">Title</label>
+          <input id="topic-title" type="text" placeholder="e.g. Chunking strategies" />
+        </div>
+        <div class="field">
+          <label for="topic-summary">Summary</label>
+          <input id="topic-summary" type="text" placeholder="One line — shown in tooltips and overview cards" />
+        </div>
+        <div class="field">
+          <label>Content</label>
+          <div class="note-toolbar" id="topic-content-toolbar"></div>
+          <div class="note-editor" id="topic-content-editor" contenteditable="true"
+               data-placeholder="Write the topic… paste images (Ctrl/&#8984;+V)."></div>
+        </div>
+        <div class="field">
+          <label for="topic-group">Tags</label>
+          <input id="topic-group" type="text" list="topic-grouplist" placeholder="e.g. Retrieval  or  Retrieval::RAG (use :: to nest)" />
+          <datalist id="topic-grouplist"></datalist>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="note-action" id="topic-cancel">Cancel</button>
+        <button class="note-action primary" id="topic-create">Create Topic</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tooltip"></div>
+  <div id="backdrop"></div>
+  <aside id="drawer">
+    <div class="drawer-head">
+      <span class="tag-chip" id="drawer-tag"></span>
+      <button class="drawer-close" id="drawer-close" aria-label="Close">×</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+<script src="vendor/mermaid.min.js"></script>
+<script>
+/* ---- Data: grouped terms ---- */
+/* app-identity: stamp local writes so another app's server rejects them (409) */
+const APP_ID = "agenticai";
+(function () {
+  const _f = window.fetch;
+  const GUARDED = { "/terms": 1, "/qa": 1, "/topics": 1, "/notes": 1 };
+  window.fetch = function (url, opts) {
+    try {
+      if (opts && opts.method === "POST" && typeof url === "string" &&
+          GUARDED[url] && typeof opts.body === "string") {
+        const o = JSON.parse(opts.body);
+        if (o && typeof o === "object" && !Array.isArray(o)) {
+          o._app = APP_ID;
+          opts = Object.assign({}, opts, { body: JSON.stringify(o) });
+        }
+      }
+    } catch (e) {}
+    return _f.call(this, url, opts);
+  };
+})();
+const BUILTIN_GROUPS = [];
+
+/* ---- Index (built-in + custom terms, rebuildable) ---- */
+let GROUPS = [];
+let TERMS = {};
+let customTerms = {};   // id -> custom term (loaded from server or localStorage)
+
+/* nested tags use "::" as the delimiter, e.g. "Reliability::Retries" */
+const TAG_SEP = "::";
+function tagParts(group) { return (group || "").split(TAG_SEP).map(s => s.trim()).filter(Boolean); }
+function tagLeaf(group) { const p = tagParts(group); return p[p.length - 1] || group; }
+
+function rebuildData() {
+  GROUPS = []; TERMS = {};
+  const byName = {};
+  Object.values(customTerms).forEach(t => {
+    if (!t.builtin) t._custom = true;
+    let g = byName[t.group];
+    if (!g) { g = { name: t.group, tag: t.tag || tagLeaf(t.group), terms: [] }; byName[t.group] = g; GROUPS.push(g); }
+    g.terms.push(t);
+  });
+  GROUPS.forEach(g => g.terms.forEach(t => { t._group = g; TERMS[t.id] = t; }));
+}
+
+/* drop runtime-only props (_group back-ref, _custom) before persisting */
+function stripRuntime(o) {
+  const c = {};
+  for (const k in o) if (k.charAt(0) !== "_") c[k] = o[k];
+  return c;
+}
+function serializeMap(map) {
+  const out = {};
+  for (const id in map) out[id] = stripRuntime(map[id]);
+  return out;
+}
+
+/* built-in terms become seed rows in the store (terms.json / localStorage) */
+function builtinSeed() {
+  const out = {};
+  BUILTIN_GROUPS.forEach(g => g.terms.forEach(t => {
+    out[t.id] = {
+      id: t.id, title: t.title, group: g.name, tag: g.tag,
+      lede: t.lede, what: t.what, why: t.why, apply: t.apply,
+      code: t.code, related: t.related, builtin: true
+    };
+  }));
+  return out;
+}
+
+const escapeHtml = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+/* ---- Lightweight syntax highlighter for the Example code block ----
+   Tokenizes (comment | string | number | identifier | ws | other), escapes each
+   token, and wraps it in a theme-aware colored span. Language-agnostic enough for
+   the Python / pseudo-code snippets in the glossary (handles # and // comments). */
+const CODE_KEYWORDS = new Set(["class","def","for","in","if","else","elif","return",
+  "break","continue","import","from","None","True","False","and","or","not","is",
+  "range","while","with","as","try","except","finally","pass","lambda","yield","raise",
+  "async","await","global","assert","del","const","let","var","function","new","of",
+  // JS / TypeScript
+  "interface","type","enum","export","default","extends","implements","public",
+  "private","protected","readonly","this","super","typeof","instanceof","void",
+  "null","undefined","true","false","switch","case","throw","catch","do","await",
+  "boolean","string","number","any","unknown","never","keyof","namespace","declare",
+  // SQL (upper- and lower-case both appear in the wild)
+  "SELECT","FROM","WHERE","JOIN","LEFT","RIGHT","INNER","OUTER","ON","GROUP","ORDER",
+  "BY","HAVING","LIMIT","OFFSET","INSERT","INTO","VALUES","UPDATE","SET","DELETE",
+  "CREATE","TABLE","INDEX","DISTINCT","UNION","AS","AND","OR","NOT","NULL","IS",
+  "select","from","where","join","left","inner","on","group","order","by","limit"]);
+function highlightCode(code) {
+  const span = (color, text) => `<span style="color:${color}">${escapeHtml(text)}</span>`;
+  // `--` needs a following space to count as a SQL comment, so JS `i--` survives
+  const re = /(#[^\n]*|\/\/[^\n]*|--[ \t][^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\d._]*\b)|([A-Za-z_]\w*)|(\s+)|([^\s\w])/g;
+  let out = "", m, prev = null;
+  while ((m = re.exec(code)) !== null) {
+    const [, comment, str, num, ident, ws, other] = m;
+    if (comment !== undefined) { out += span("var(--muted)", comment); prev = null; }
+    else if (str !== undefined) { out += span("#1f9e8a", str); prev = null; }
+    else if (num !== undefined) { out += span("#9b6cd6", num); prev = null; }
+    else if (ident !== undefined) {
+      if (CODE_KEYWORDS.has(ident)) out += span("#e0803a", ident);
+      else if (ident === "self") out += span("#6ea8fe", ident);
+      else if (prev === "def" || prev === "class" || prev === "function") out += span("#9b6cd6", ident);
+      else out += escapeHtml(ident);
+      prev = ident;
+    }
+    else if (ws !== undefined) { out += ws; /* keep prev so `def <name>` still links */ }
+    else { out += escapeHtml(other); prev = null; }
+  }
+  return out;
+}
+
+/* Colorize plain code blocks in already-mounted HTML (term `what`, QA answers),
+   where the markup comes pre-baked from JSON rather than from the `code` field.
+   Only touches <pre><code> that isn't already hand-styled; bare <pre> (ASCII
+   diagrams) and <pre class="mermaid"> are deliberately left alone. */
+function highlightPlainCodeBlocks(root) {
+  if (!root) return;
+  root.querySelectorAll("pre > code").forEach(el => {
+    if (el.querySelector("span")) return;                        // already styled by hand
+    if (el.parentElement.classList.contains("mermaid")) return;  // diagram source
+    if (el.dataset.hl === "1") return;                           // idempotent
+    el.innerHTML = highlightCode(el.textContent);
+    el.dataset.hl = "1";
+  });
+}
+
+/* ---- Shared detail HTML ---- */
+function detailHTML(t, withTag) {
+  const related = (t.related || []).filter(r => TERMS[r]).map(r =>
+    `<span class="pill" data-id="${r}">${TERMS[r].title}</span>`).join("");
+  return `
+    ${withTag ? `<div class="crumbs"><span class="tag-chip">${t._group.tag}</span></div>` : ""}
+    <h2 class="term-title">${t.title}</h2>
+    ${t.lede ? `<p class="lede">${t.lede}</p>` : ""}
+    <div class="term-actions">
+      <button class="note-action" data-act="edit-term">&#9998; Edit term</button>
+      ${!t.builtin ? `<button class="note-action danger" data-act="delete-term">&#128465; Delete</button>` : ""}
+    </div>
+    ${t.what ? `<div class="section"><h3>${t.builtin ? "What it is" : "Details"}</h3><div class="rich">${t.what}</div></div>` : ""}
+    ${t.why ? `<div class="section"><h3>Why it matters</h3><p>${t.why}</p></div>` : ""}
+    ${t.apply && t.apply.length ? `<div class="section"><h3>How to apply</h3>${Array.isArray(t.apply) ? `<ul>${t.apply.map(a => `<li>${a}</li>`).join("")}</ul>` : `<div class="rich">${t.apply}</div>`}</div>` : ""}
+    ${t.code ? `<div class="section"><h3>Example</h3><pre><code>${highlightCode(t.code)}</code></pre></div>` : ""}
+    ${notesSectionHTML()}
+    ${related ? `<div class="section"><h3>Related terms</h3><div class="related">${related}</div></div>` : ""}
+  `;
+}
+
+/* shared "My notes" markup (used by Term and QA detail) */
+function notesSectionHTML() {
+  return `
+    <div class="section notes-section">
+      <div class="notes-head">
+        <h3>My notes</h3>
+        <div class="notes-actions">
+          <button class="note-action" data-act="edit">&#9998; Edit</button>
+          <button class="note-action primary" data-act="save" hidden>&#10003; Save</button>
+          <button class="note-action" data-act="cancel" hidden>Cancel</button>
+        </div>
+      </div>
+      <div class="note-view"></div>
+      <div class="note-edit" hidden>
+        <div class="note-toolbar">
+          <button class="note-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+          <button class="note-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+          <button class="note-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+          <button class="note-btn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+          <button class="note-btn" data-cmd="formatBlock" title="Heading">H</button>
+          <button class="note-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull;</button>
+          <button class="note-btn" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+          <button class="note-btn" data-cmd="createLink" title="Insert link">&#128279;</button>
+          <button class="note-btn" data-act="image" title="Insert image from file">&#128247;</button>
+          <button class="note-btn" data-act="folder" title="Choose folder to store pasted images">&#128193;</button>
+          <button class="note-btn muted" data-act="clear" title="Clear editor">&#128465;</button>
+        </div>
+        <div class="note-editor" contenteditable="true"
+             data-placeholder="Type notes… paste an image (Ctrl/&#8984;+V) to embed it."></div>
+        <div class="note-hint" data-folder-status></div>
+      </div>
+    </div>`;
+}
+
+/* ---- Sidebar (Terms / QA tabs, each Tree / Flat) ---- */
+const nav = document.getElementById("nav");
+let sidebarMode = "tree";
+let navSection = "terms";            // "terms" | "qa" | "topics" | "docs"
+function navGroups() { return navSection === "qa" ? QA_GROUPS : navSection === "topics" ? TOPIC_GROUPS : GROUPS; }
+function navIndex() { return navSection === "qa" ? QA_INDEX : navSection === "topics" ? TOPIC_INDEX : TERMS; }
+function navOpen(id) { return navSection === "qa" ? selectQA(id) : navSection === "topics" ? selectTopic(id) : select(id); }
+function renderSidebar(mode) {
+  sidebarMode = mode;
+  nav.innerHTML = "";
+  nav.classList.toggle("flat", mode === "flat");
+
+  if (navSection === "docs") {
+    renderDocsNav(mode);
+    applyFilter();
+    if (currentDocName) markActive(currentDocName);
+    return;
+  }
+
+  if (mode === "flat") {
+    const all = Object.values(navIndex()).slice().sort((a, b) => a.title.localeCompare(b.title));
+    const group = document.createElement("div");
+    group.className = "group";
+    const items = document.createElement("div");
+    items.className = "group-items";
+    all.forEach(t => items.appendChild(itemEl(t)));
+    group.appendChild(items);
+    nav.appendChild(group);
+  } else {
+    renderTreeNode(buildTree(navGroups()), nav, 0);
+  }
+  applyFilter();
+  const activeId = navSection === "qa" ? currentQAId : navSection === "topics" ? currentTopicId : currentId;
+  if (activeId) markActive(activeId);
+}
+function itemEl(t) {
+  const el = document.createElement("div");
+  el.className = "term";
+  el.dataset.id = t.id;
+  el.textContent = t.title;
+  el.addEventListener("click", () => navOpen(t.id));
+  return el;
+}
+/* build a nested tree from groups whose names use "::" (e.g. "A::B::C").
+   Each node keeps its full "A::B" path so tag actions can address it. */
+function buildTree(groups) {
+  const root = { children: {}, order: [], terms: [], path: "" };
+  groups.forEach(g => {
+    let node = root;
+    tagParts(g.name).forEach(p => {
+      if (!node.children[p]) {
+        node.children[p] = { name: p, children: {}, order: [], terms: [],
+                             path: node.path ? node.path + "::" + p : p };
+        node.order.push(p);
+      }
+      node = node.children[p];
+    });
+    node.terms.push(...g.terms);
+  });
+  return root;
+}
+function countTree(node) {
+  let n = node.terms.length;
+  node.order.forEach(k => (n += countTree(node.children[k])));
+  return n;
+}
+function renderTreeNode(node, container, depth, opts) {
+  opts = opts || {};
+  const mk = opts.item || itemEl;
+  node.order.forEach(key => {
+    const child = node.children[key];
+    const group = document.createElement("div");
+    group.className = "group";
+    const head = document.createElement("div");
+    head.className = "group-head";
+    head.style.paddingLeft = (10 + depth * 12) + "px";
+    head.innerHTML = `<span class="caret">▼</span><span>${child.name}</span><span class="count">${countTree(child)}</span>`;
+    head.addEventListener("click", () => group.classList.toggle("collapsed"));
+    if (opts.tagActions) {                            // ✎ rename / 🗑 delete this tag
+      const rename = document.createElement("button");
+      rename.className = "tag-act"; rename.innerHTML = "&#9998;";
+      rename.title = `Rename tag "${child.path}"`;
+      rename.addEventListener("click", e => { e.stopPropagation(); renameDocTag(child.path); });
+      const del = document.createElement("button");
+      del.className = "tag-act"; del.innerHTML = "&#128465;";
+      del.title = `Delete tag "${child.path}" (its docs become Untagged)`;
+      del.addEventListener("click", e => { e.stopPropagation(); deleteDocTag(child.path); });
+      head.appendChild(rename); head.appendChild(del);
+    }
+    group.appendChild(head);
+    const items = document.createElement("div");
+    items.className = "group-items";
+    renderTreeNode(child, items, depth + 1, opts);    // nested sub-tags first
+    child.terms.forEach(t => {
+      const el = mk(t);
+      el.style.paddingLeft = (22 + depth * 12) + "px";
+      items.appendChild(el);
+    });
+    group.appendChild(items);
+    container.appendChild(group);
+  });
+}
+
+/* ---- Docs sidebar: untagged first (flat), then the content-tag tree ---- */
+const UNTAGGED = "Untagged";
+function docTagOf(d) { return ((d && d.tag) || "").trim() || UNTAGGED; }
+function knownDocTags() {
+  return [...new Set(DOCS.map(docTagOf).filter(t => t !== UNTAGGED))].sort((a, b) => a.localeCompare(b));
+}
+function docItemEl(d) {
+  const el = document.createElement("div");
+  el.className = "term";
+  el.dataset.id = d.name;
+  el.textContent = d.title || d.name;
+  el.title = docTagOf(d) === UNTAGGED ? d.name : `${d.name}  ·  ${docTagOf(d)}`;
+  el.addEventListener("click", () => selectDoc(d.name));
+  return el;
+}
+function renderDocsNav(mode) {
+  if (!DOCS.length) {
+    const group = document.createElement("div");
+    group.className = "group";
+    const items = document.createElement("div");
+    items.className = "group-items";
+    const msg = document.createElement("div");
+    msg.className = "nav-empty";
+    msg.innerHTML = SERVER
+      ? "No <code>.md</code> files in the <code>docs/</code> folder yet."
+      : "Docs load via the local server. Run <code>python3 server.py</code>.";
+    items.appendChild(msg);
+    group.appendChild(items);
+    nav.appendChild(group);
+    return;
+  }
+  const untagged = DOCS.filter(d => docTagOf(d) === UNTAGGED);
+  const tagged = DOCS.filter(d => docTagOf(d) !== UNTAGGED);
+
+  // Untagged docs always sit at the very top as a plain flat list — they are the
+  // work queue: open one, give it a tag, and it moves down into the tree.
+  if (untagged.length) {
+    const group = document.createElement("div");
+    group.className = "group untagged";
+    const head = document.createElement("div");
+    head.className = "untagged-head";
+    head.innerHTML = `<span>Untagged</span><span class="count">${untagged.length}</span>`;
+    group.appendChild(head);
+    const items = document.createElement("div");
+    items.className = "group-items";
+    untagged.forEach(d => items.appendChild(docItemEl(d)));
+    group.appendChild(items);
+    nav.appendChild(group);
+  }
+
+  if (mode === "flat") {                              // flat view: no tag grouping at all
+    const group = document.createElement("div");
+    group.className = "group";
+    const items = document.createElement("div");
+    items.className = "group-items";
+    tagged.forEach(d => items.appendChild(docItemEl(d)));
+    group.appendChild(items);
+    nav.appendChild(group);
+    return;
+  }
+  const byTag = new Map();
+  tagged.forEach(d => {
+    const t = docTagOf(d);
+    if (!byTag.has(t)) byTag.set(t, []);
+    byTag.get(t).push(d);
+  });
+  const groups = [...byTag.keys()].sort((a, b) => a.localeCompare(b))
+                                  .map(name => ({ name, terms: byTag.get(name) }));
+  renderTreeNode(buildTree(groups), nav, 0, { item: docItemEl, tagActions: true });
+}
+
+/* ---- Glossary detail pane ---- */
+const detail = document.getElementById("detail");
+let currentId = null;
+let currentQAId = null;
+let currentTopicId = null;
+function markActive(id) {
+  document.querySelectorAll("#nav .term").forEach(e => e.classList.toggle("active", e.dataset.id === id));
+}
+function select(id) {
+  const t = TERMS[id];
+  if (!t) return;
+  currentId = id;
+  setNavSection("terms");
+  showTab("glossary");
+  markActive(id);
+  detail.innerHTML = detailHTML(t, true);
+  highlightPlainCodeBlocks(detail);
+  detail.querySelectorAll(".pill").forEach(p => p.addEventListener("click", () => select(p.dataset.id)));
+  mountTermActions(detail, id);
+  mountNotes(detail, id);
+  history.replaceState(null, "", "#" + id);
+  document.getElementById("main").scrollTop = 0;
+}
+function selectQA(id) {
+  const q = QA_INDEX[id];
+  if (!q) return;
+  currentQAId = id;
+  setNavSection("qa");
+  showTab("glossary");
+  markActive(id);
+  detail.innerHTML = qaDetailHTML(q);
+  highlightPlainCodeBlocks(detail);
+  mountQAActions(detail, id);
+  mountNotes(detail, qaNoteId(id), "qa");
+  history.replaceState(null, "", "#qa/" + id);
+  document.getElementById("main").scrollTop = 0;
+}
+function selectTopic(id) {
+  const t = TOPIC_INDEX[id];
+  if (!t) return;
+  currentTopicId = id;
+  setNavSection("topics");
+  showTab("glossary");
+  markActive(id);
+  detail.innerHTML = topicDetailHTML(t);
+  highlightPlainCodeBlocks(detail);
+  attachLinkPreviews(detail);
+  mountTopicActions(detail, id);
+  mountNotes(detail, topicNoteId(id), "topics");
+  history.replaceState(null, "", "#topic/" + id);
+  document.getElementById("main").scrollTop = 0;
+}
+
+/* ---- Search filter ---- */
+const searchInput = document.getElementById("search");
+function applyFilter() {
+  const q = searchInput.value.trim().toLowerCase();
+  if (navSection === "docs") {
+    document.querySelectorAll("#nav .group").forEach(group => {
+      let visible = 0;
+      group.querySelectorAll(".term").forEach(term => {
+        const d = DOCS.find(x => x.name === term.dataset.id);
+        const hay = d ? `${d.title || ""} ${d.name} ${docTagOf(d)} ${(d.tags || []).join(" ")}`.toLowerCase() : "";
+        const hit = !q || hay.includes(q);
+        term.classList.toggle("hidden", !hit);
+        if (hit) visible++;
+      });
+      group.classList.toggle("hidden", visible === 0);
+      if (q) group.classList.remove("collapsed");
+    });
+    return;
+  }
+  const index = navIndex();
+  document.querySelectorAll("#nav .group").forEach(group => {
+    let visible = 0;
+    group.querySelectorAll(".term").forEach(term => {
+      const t = index[term.dataset.id];
+      const hit = !q || (t && (t.title.toLowerCase().includes(q) || (t.lede || "").toLowerCase().includes(q)));
+      term.classList.toggle("hidden", !hit);
+      if (hit) visible++;
+    });
+    group.classList.toggle("hidden", visible === 0);
+    if (q) group.classList.remove("collapsed");
+  });
+}
+searchInput.addEventListener("input", applyFilter);
+
+/* ---- Sidebar Terms / QA / Docs tab switch ---- */
+const navtabTerms = document.getElementById("navtab-terms");
+const navtabQA = document.getElementById("navtab-qa");
+const navtabTopics = document.getElementById("navtab-topics");
+const navtabDocs = document.getElementById("navtab-docs");
+const sideAddBtn = document.getElementById("add-term-btn");
+const viewToggleEl = document.querySelector(".view-toggle");
+const collapseBtnEl = document.getElementById("btn-collapse");
+function setNavSection(section) {
+  if (navSection === section) return;
+  navSection = section;
+  navtabTerms.classList.toggle("active", section === "terms");
+  navtabQA.classList.toggle("active", section === "qa");
+  navtabTopics.classList.toggle("active", section === "topics");
+  navtabDocs.classList.toggle("active", section === "docs");
+  const isDocs = section === "docs";
+  sideAddBtn.style.display = isDocs ? "none" : "";           // docs come from files, not the UI
+  viewToggleEl.style.display = "";                           // docs group by tag, so tree/flat applies
+  collapseBtnEl.style.display = "";
+  if (!isDocs) sideAddBtn.textContent = section === "terms" ? "+ Add term" : section === "topics" ? "+ Add Topic" : "+ Add Q&A";
+  searchInput.placeholder = isDocs ? "Filter docs by title or tag…"
+    : section === "terms" ? "Filter terms…" : section === "topics" ? "Filter topics…" : "Filter Q&A…";
+  renderSidebar(sidebarMode);
+}
+navtabTerms.addEventListener("click", () => setNavSection("terms"));
+navtabQA.addEventListener("click", () => setNavSection("qa"));
+navtabTopics.addEventListener("click", () => setNavSection("topics"));
+navtabDocs.addEventListener("click", () => showTab("docs"));
+
+/* ---- View toggle ---- */
+const btnTree = document.getElementById("btn-tree");
+const btnFlat = document.getElementById("btn-flat");
+const savePref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const loadPref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
+btnTree.addEventListener("click", () => { btnTree.classList.add("active"); btnFlat.classList.remove("active"); savePref("agentai-nav-view", "tree"); renderSidebar("tree"); });
+btnFlat.addEventListener("click", () => { btnFlat.classList.add("active"); btnTree.classList.remove("active"); savePref("agentai-nav-view", "flat"); renderSidebar("flat"); });
+document.getElementById("btn-collapse").addEventListener("click", () => {
+  const groups = [...nav.querySelectorAll(".group")].filter(g => g.querySelector(":scope > .group-head"));
+  const anyOpen = groups.some(g => !g.classList.contains("collapsed"));
+  groups.forEach(g => g.classList.toggle("collapsed", anyOpen));   // all open -> collapse all; else expand all
+});
+
+/* ---- Top tabs + nav toggle ---- */
+const main = document.getElementById("main");
+const overview = document.getElementById("overview");
+const searchView = document.getElementById("search-view");
+const layout = document.querySelector(".layout");
+function showTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  const isOverview = tab === "terms" || tab === "qa" || tab === "topics";
+  const isSearch = tab === "search";
+  overview.classList.toggle("show", isOverview);
+  searchView.classList.toggle("show", isSearch);
+  main.style.display = (isOverview || isSearch) ? "none" : "block";
+  if (!isOverview && typeof stopGlobe === "function") stopGlobe();
+  if (tab === "terms") setOvDataset(termsCtx);
+  else if (tab === "qa") setOvDataset(qaCtx);
+  else if (tab === "topics") setOvDataset(topicsCtx);
+  else if (isSearch) openSearch();
+  else if (tab === "docs") enterDocs();
+}
+document.querySelectorAll(".tab-btn").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* hamburger toggles the left navigation on/off (remembered) */
+document.getElementById("nav-toggle").addEventListener("click", () => {
+  const closed = layout.classList.toggle("nav-closed");
+  savePref("agentai-nav-open", closed ? "0" : "1");
+});
+
+/* ---- Terms overview (boxes grouped by tag) ---- */
+const ovGroups = document.getElementById("ov-groups");
+let overviewBuilt = false;
+function makeBox(t, tag) {
+  const box = document.createElement("div");
+  box.className = "box";
+  box.dataset.id = t.id;
+  box.innerHTML = `<div class="b-tag">${tag}</div><div class="b-title">${t.title}</div>`;
+  box.addEventListener("mouseenter", e => showTip(e, t));
+  box.addEventListener("mousemove", moveTip);
+  box.addEventListener("mouseleave", hideTip);
+  box.addEventListener("click", () => { hideTip(); ovCtx.open(t.id); });
+  return box;
+}
+function renderOverviewNode(node, container, depth) {
+  node.order.forEach(key => {
+    const child = node.children[key];
+    const wrap = document.createElement("div");
+    wrap.className = "ov-group" + (depth > 0 ? " ov-nested" : "");
+    if (depth > 0) wrap.style.marginLeft = (depth * 18) + "px";
+    wrap.innerHTML = `<div class="ov-group-title"><span class="name">${child.name}</span><span class="count">${countTree(child)}</span></div>`;
+    if (child.terms.length) {
+      const boxes = document.createElement("div");
+      boxes.className = "boxes";
+      child.terms.forEach(t => boxes.appendChild(makeBox(t, child.name)));
+      wrap.appendChild(boxes);
+    }
+    container.appendChild(wrap);
+    renderOverviewNode(child, container, depth + 1);   // nested sub-tags follow, indented
+  });
+}
+function renderOverview() {
+  if (overviewBuilt) return;
+  renderOverviewNode(buildTree(ovCtx.groups()), ovGroups, 0);
+  overviewBuilt = true;
+}
+
+/* ---- Wall view (compact centered cloud of all terms) ---- */
+const ovWall = document.getElementById("ov-wall");
+const ovGroupsEl = document.getElementById("ov-groups");
+const ovbGrouped = document.getElementById("ovb-grouped");
+const ovbWall = document.getElementById("ovb-wall");
+const GROUP_COLORS = ["#6ea8fe", "#b692ff", "#ff9e64", "#5ed3a0", "#ff7b9c"];
+const CHIP_SIZES = [14, 16, 13, 17, 15];
+let wallBuilt = false;
+function renderWall() {
+  if (wallBuilt) return;
+  let i = 0;
+  ovCtx.groups().forEach((g, gi) => {
+    const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+    g.terms.forEach(t => {
+      const chip = document.createElement("div");
+      chip.className = "chip-term";
+      chip.textContent = t.title;
+      chip.style.fontSize = CHIP_SIZES[i % CHIP_SIZES.length] + "px";
+      chip.style.borderColor = color;
+      chip.style.color = color;
+      chip.addEventListener("mouseenter", e => showTip(e, t));
+      chip.addEventListener("mousemove", moveTip);
+      chip.addEventListener("mouseleave", hideTip);
+      chip.addEventListener("click", () => { hideTip(); ovCtx.open(t.id); });
+      ovWall.appendChild(chip);
+      i++;
+    });
+  });
+  wallBuilt = true;
+}
+/* ---- Globe view (rotating 3D sphere of term chips) ---- */
+const ovGlobe = document.getElementById("ov-globe");
+const ovbGlobe = document.getElementById("ovb-globe");
+let globeBuilt = false, globeActive = false, globeRAF = null;
+let globeChips = [];
+let gAngleX = 0.3, gAngleY = 0, gVelX = 0, gVelY = 0.004, gPaused = false;
+let gZoom = 1, gAuto = true;
+const gMouse = { x: 0, y: 0, inside: false };
+
+function buildGlobe() {
+  if (globeBuilt) return;
+  const all = [];
+  ovCtx.groups().forEach((g, gi) => g.terms.forEach(t => all.push({ t, color: GROUP_COLORS[gi % GROUP_COLORS.length] })));
+  const N = all.length;
+  all.forEach((item, idx) => {
+    const phi = Math.acos(1 - 2 * (idx + 0.5) / N);
+    const theta = Math.PI * (1 + Math.sqrt(5)) * (idx + 0.5);
+    const chip = document.createElement("div");
+    chip.className = "globe-chip";
+    chip.textContent = item.t.title;
+    chip.style.color = item.color;
+    chip.style.borderColor = item.color;
+    chip.addEventListener("mouseenter", e => { gPaused = true; showTip(e, item.t); });
+    chip.addEventListener("mousemove", moveTip);
+    chip.addEventListener("mouseleave", () => { gPaused = false; hideTip(); });
+    chip.addEventListener("click", () => { hideTip(); ovCtx.open(item.t.id); });
+    ovGlobe.appendChild(chip);
+    globeChips.push({
+      el: chip,
+      x: Math.sin(phi) * Math.cos(theta),
+      y: Math.sin(phi) * Math.sin(theta),
+      z: Math.cos(phi)
+    });
+  });
+  globeBuilt = true;
+}
+function globeFrame() {
+  if (!globeActive) return;
+  const rect = ovGlobe.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const radius = (Math.min(rect.width, rect.height) / 2 - 70) * gZoom;
+  if (!gPaused && gAuto) {
+    if (gMouse.inside) {
+      gVelY = ((gMouse.x - cx) / cx) * 0.06;
+      gVelX = -((gMouse.y - cy) / cy) * 0.06;
+    } else {
+      gVelY += (0.004 - gVelY) * 0.02;
+      gVelX += (0 - gVelX) * 0.02;
+    }
+    gAngleY += gVelY;
+    gAngleX += gVelX;
+  }
+  const sinY = Math.sin(gAngleY), cosY = Math.cos(gAngleY);
+  const sinX = Math.sin(gAngleX), cosX = Math.cos(gAngleX);
+  globeChips.forEach(c => {
+    const x1 = c.x * cosY - c.z * sinY;
+    const z1 = c.x * sinY + c.z * cosY;
+    const y2 = c.y * cosX - z1 * sinX;
+    const z2 = c.y * sinX + z1 * cosX;
+    const depth = (z2 + 1) / 2;                 // 0 (back) .. 1 (front)
+    const px = cx + x1 * radius;
+    const py = cy + y2 * radius;
+    const el = c.el;
+    el.style.transform = `translate(-50%,-50%) translate(${px}px,${py}px) scale(${(0.6 + depth * 0.55).toFixed(3)})`;
+    el.style.opacity = (0.3 + depth * 0.7).toFixed(3);
+    el.style.zIndex = Math.round(depth * 100);
+  });
+  globeRAF = requestAnimationFrame(globeFrame);
+}
+function startGlobe() {
+  buildGlobe();
+  globeActive = true;
+  if (!globeRAF) globeRAF = requestAnimationFrame(globeFrame);
+}
+function stopGlobe() {
+  globeActive = false;
+  if (globeRAF) { cancelAnimationFrame(globeRAF); globeRAF = null; }
+}
+ovGlobe.addEventListener("mousemove", e => {
+  const r = ovGlobe.getBoundingClientRect();
+  gMouse.x = e.clientX - r.left; gMouse.y = e.clientY - r.top; gMouse.inside = true;
+});
+ovGlobe.addEventListener("mouseleave", () => { gMouse.inside = false; });
+
+/* globe control bar */
+const globeControls = document.getElementById("globe-controls");
+let gHoldTimer = null;
+function gHoldStart(fn) { fn(); gHoldTimer = setInterval(fn, 40); }
+function gHoldStop() { if (gHoldTimer) { clearInterval(gHoldTimer); gHoldTimer = null; } }
+const GSTEP = 0.1;
+function gNudge(dir) {
+  if (dir === "left") gAngleY -= GSTEP;
+  else if (dir === "right") gAngleY += GSTEP;
+  else if (dir === "up") gAngleX -= GSTEP;
+  else if (dir === "down") gAngleX += GSTEP;
+}
+function gZoomBy(f) { gZoom = Math.min(2.4, Math.max(0.6, gZoom * f)); }
+const HOLD_END = ["pointerup", "pointerleave", "pointercancel"];
+globeControls.querySelectorAll(".gc-btn[data-dir]").forEach(btn => {
+  const dir = btn.dataset.dir;
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); gHoldStart(() => gNudge(dir)); });
+  HOLD_END.forEach(ev => btn.addEventListener(ev, gHoldStop));
+});
+const zin = globeControls.querySelector('[data-act="zoomin"]');
+const zout = globeControls.querySelector('[data-act="zoomout"]');
+zin.addEventListener("pointerdown", e => { e.preventDefault(); gHoldStart(() => gZoomBy(1.04)); });
+zout.addEventListener("pointerdown", e => { e.preventDefault(); gHoldStart(() => gZoomBy(0.96)); });
+[zin, zout].forEach(b => HOLD_END.forEach(ev => b.addEventListener(ev, gHoldStop)));
+const playBtn = globeControls.querySelector('[data-act="play"]');
+playBtn.addEventListener("click", () => { gAuto = !gAuto; playBtn.innerHTML = gAuto ? "&#10073;&#10073;" : "&#9654;"; });
+globeControls.querySelector('[data-act="reset"]').addEventListener("click", () => {
+  gAngleX = 0.3; gAngleY = 0; gVelX = 0; gVelY = 0.004; gZoom = 1; gAuto = true;
+  playBtn.innerHTML = "&#10073;&#10073;";
+});
+
+let ovView = "grouped";
+function setOvView(view) {
+  ovView = view;
+  ovbGrouped.classList.toggle("active", view === "grouped");
+  ovbWall.classList.toggle("active", view === "wall");
+  ovbGlobe.classList.toggle("active", view === "globe");
+  ovGroupsEl.style.display = view === "grouped" ? "block" : "none";
+  ovWall.style.display = view === "wall" ? "flex" : "none";
+  ovGlobe.style.display = view === "globe" ? "block" : "none";
+  globeControls.style.display = view === "globe" ? "flex" : "none";
+  if (view === "grouped") renderOverview();
+  if (view === "wall") renderWall();
+  if (view === "globe") startGlobe(); else stopGlobe();
+}
+ovbGrouped.addEventListener("click", () => setOvView("grouped"));
+ovbWall.addEventListener("click", () => setOvView("wall"));
+ovbGlobe.addEventListener("click", () => setOvView("globe"));
+
+/* ---- Overview dataset context (Terms or QA share the same views) ---- */
+const ovHeadTitle = document.querySelector("#overview .ov-head h2");
+const ovAddBtn = document.getElementById("add-term-btn2");
+const termsCtx = {
+  title: "All Terms", addLabel: "+ Add term",
+  groups: () => GROUPS, open: id => openDrawer(id), add: () => openTermModal()
+};
+const qaCtx = {
+  title: "All Q&A", addLabel: "+ Add Q&A",
+  groups: () => QA_GROUPS, open: id => openQADrawer(id), add: () => openQAModal()
+};
+const topicsCtx = {
+  title: "All Topics", addLabel: "+ Add Topic",
+  groups: () => TOPIC_GROUPS, open: id => openTopicDrawer(id), add: () => openTopicModal()
+};
+let ovCtx = termsCtx;
+function resetOverviewViews() {
+  overviewBuilt = false; ovGroupsEl.innerHTML = "";
+  wallBuilt = false; ovWall.innerHTML = "";
+  globeBuilt = false; globeChips = []; ovGlobe.innerHTML = "";
+}
+function setOvDataset(ctx) {
+  ovCtx = ctx;
+  ovHeadTitle.textContent = ctx.title;
+  ovAddBtn.textContent = ctx.addLabel;
+  resetOverviewViews();
+  setOvView(ovView);
+}
+ovAddBtn.addEventListener("click", () => ovCtx.add());
+
+/* ---- Quick-peek tooltip ---- */
+const tooltip = document.getElementById("tooltip");
+function showTip(e, t) {
+  tooltip.innerHTML = `<div class="tt-title">${t.title}</div>${t.lede}`;
+  tooltip.style.display = "block";
+  requestAnimationFrame(() => tooltip.style.opacity = "1");
+  moveTip(e);
+}
+function moveTip(e) {
+  const pad = 14, w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + w > window.innerWidth - 8) x = e.clientX - w - pad;
+  if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+}
+function hideTip() { tooltip.style.opacity = "0"; tooltip.style.display = "none"; }
+
+/* ---- Slide-over drawer ---- */
+const backdrop = document.getElementById("backdrop");
+const drawer = document.getElementById("drawer");
+const drawerBody = document.getElementById("drawer-body");
+const drawerTag = document.getElementById("drawer-tag");
+function openDrawer(id) {
+  const t = TERMS[id];
+  if (!t) return;
+  drawerTag.textContent = t._group.tag;
+  drawerBody.innerHTML = detailHTML(t, false);
+  highlightPlainCodeBlocks(drawerBody);
+  drawerBody.querySelectorAll(".pill").forEach(p => p.addEventListener("click", () => openDrawer(p.dataset.id)));
+  mountTermActions(drawerBody, id);
+  mountNotes(drawerBody, id);
+  drawerBody.scrollTop = 0;
+  backdrop.classList.add("open");
+  drawer.classList.add("open");
+}
+function closeDrawer() { backdrop.classList.remove("open"); drawer.classList.remove("open"); }
+document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+backdrop.addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+/* ===================================================================
+   Notes: rich-text editor + image storage (folder or inline fallback)
+   =================================================================== */
+const NOTE_KEY = id => "agentai-note:" + id;
+let dirHandle = null;                       // chosen folder for pasted images
+const objectUrls = [];                       // track for cleanup
+
+/* --- tiny IndexedDB kv (to persist the folder handle across reloads) --- */
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("app:" + APP_ID, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(k) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const t = db.transaction("kv").objectStore("kv").get(k);
+    t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error);
+  });
+}
+async function idbSet(k, v) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction("kv", "readwrite");
+    tx.objectStore("kv").put(v, k);
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+  });
+}
+
+/* --- Local server upload (preferred when page is served over http) --- */
+const SERVER = location.protocol === "http:" || location.protocol === "https:";
+async function uploadToServer(blob, name, subdir) {
+  const headers = { "X-Filename": name, "Content-Type": blob.type || "application/octet-stream" };
+  if (subdir) headers["X-Subdir"] = subdir;   // e.g. "terms" or "qa"
+  const res = await fetch("/upload", { method: "POST", headers, body: blob });
+  if (!res.ok) throw new Error("upload failed: " + res.status);
+  return (await res.json()).url;   // e.g. "/images/terms/autonomy-scoped__123.png"
+}
+
+/* notes shared via server (so every browser sees the same notes + images) */
+let serverNotesCache = null;
+function getServerNotes() {
+  if (!serverNotesCache) {
+    serverNotesCache = fetch("/notes").then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  }
+  return serverNotesCache;
+}
+function saveNoteToServer(termId, html) {
+  getServerNotes().then(notes => { notes[termId] = html; });   // keep cache in sync
+  fetch("/notes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: termId, html })
+  }).catch(() => {});
+}
+
+/* custom terms: persisted on the server (shared) or in localStorage (offline) */
+const CUSTOM_KEY = "agentai-terms";
+async function loadCustomTerms() {
+  if (SERVER) {
+    try { const r = await fetch("/terms"); return r.ok ? await r.json() : {}; } catch (e) { return {}; }
+  }
+  try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || "{}"); } catch (e) { return {}; }
+}
+function persistCustomTerm(term) {
+  customTerms[term.id] = term;
+  if (SERVER) {
+    fetch("/terms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(stripRuntime(term))
+    }).catch(() => {});
+  } else {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(serializeMap(customTerms))); } catch (e) {}
+  }
+}
+function slugify(s) {
+  return (s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")) || "term";
+}
+function uniqueId(base) {
+  let id = base, i = 2;
+  while (TERMS[id] || customTerms[id]) { id = base + "-" + i; i++; }
+  return id;
+}
+
+/* --- File System Access helpers --- */
+const FSA = typeof window.showDirectoryPicker === "function";
+async function ensurePerm(h, mode = "readwrite") {
+  if (!h) return false;
+  const opts = { mode };
+  if ((await h.queryPermission(opts)) === "granted") return true;
+  try { return (await h.requestPermission(opts)) === "granted"; } catch (e) { return false; }
+}
+async function saveImageToFolder(blob, name) {
+  const fh = await dirHandle.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(blob); await w.close();
+}
+async function loadImageFromFolder(name) {
+  const fh = await dirHandle.getFileHandle(name);
+  const url = URL.createObjectURL(await fh.getFile());
+  objectUrls.push(url);
+  return url;
+}
+async function initFolder() {
+  if (!FSA) return;
+  try { const h = await idbGet("imgdir"); if (h) dirHandle = h; } catch (e) {}
+  updateFolderUI();
+}
+async function linkFolder() {
+  if (!FSA) { alert("This browser can't store images to a folder. Pasted images will be embedded inline instead (try Chrome or Edge for folder storage)."); return; }
+  try {
+    const h = await window.showDirectoryPicker();
+    if (!(await ensurePerm(h))) return;
+    dirHandle = h;
+    await idbSet("imgdir", h);
+    updateFolderUI();
+    // re-load any folder images now that we have access
+    document.querySelectorAll(".note-editor").forEach(rehydrate);
+  } catch (e) { /* user cancelled */ }
+}
+function updateFolderUI() {
+  let label;
+  if (SERVER) {
+    label = "Pasted images are saved as files in the <b>images/</b> folder via the local server.";
+  } else if (!FSA) {
+    label = "Images are embedded inline. Tip: run <b>start.command</b> to save them as files instead.";
+  } else if (dirHandle) {
+    label = `Pasted images are saved to your linked folder <b>“${dirHandle.name}”</b>.`;
+  } else {
+    label = "Click 📁 to pick a folder for pasted images — or run <b>start.command</b> for automatic file storage.";
+  }
+  document.querySelectorAll("[data-folder-status]").forEach(el => el.innerHTML = label);
+}
+
+/* --- utilities --- */
+const blobToDataURL = blob => new Promise(res => {
+  const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob);
+});
+function placeCaretEnd(el) {
+  el.focus();
+  const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+function insertImg(editor, src, fileName) {
+  placeCaretEnd(editor);
+  const attr = fileName ? ` data-file="${fileName}"` : "";
+  document.execCommand("insertHTML", false, `<img src="${src}"${attr} alt="">`);
+}
+/* save: strip blob src from folder images (kept by data-file), embedded imgs stay */
+function serialize(editor) {
+  const c = editor.cloneNode(true);
+  c.querySelectorAll("img[data-file]").forEach(img => img.removeAttribute("src"));
+  return c.innerHTML;
+}
+function saveNote(termId, editor) {
+  const html = serialize(editor);
+  if (SERVER) { saveNoteToServer(termId, html); return; }
+  try { localStorage.setItem(NOTE_KEY(termId), html); } catch (e) {}
+}
+async function rehydrate(editor) {
+  if (!dirHandle) return;
+  if (!(await ensurePerm(dirHandle))) return;
+  for (const img of editor.querySelectorAll("img[data-file]")) {
+    if (img.getAttribute("src")) continue;
+    try { img.src = await loadImageFromFolder(img.dataset.file); }
+    catch (e) { img.alt = "[missing image: " + img.dataset.file + "]"; }
+  }
+}
+async function handleImageBlob(blob, editor, prefix, subdir) {
+  // derive extension from MIME, falling back to the file name (dropped files
+  // sometimes have an empty type) so an animated .gif is never saved as .png
+  let ext = ((blob.type.split("/")[1]) || "").toLowerCase().replace("jpeg", "jpg");
+  if (!ext && blob.name) { const m = blob.name.match(/\.([a-z0-9]+)$/i); if (m) ext = m[1].toLowerCase(); }
+  if (!ext) ext = "png";
+  const name = `${prefix}__${(new Date()).getTime()}.${ext}`;
+
+  // 1) Preferred: local server stores the file in ./images/<subdir>/ and returns a URL
+  if (SERVER) {
+    try {
+      const url = await uploadToServer(blob, name, subdir);
+      insertImg(editor, url, null);   // plain relative URL; persisted on Save
+      return;
+    } catch (e) { /* server unreachable -> fall through */ }
+  }
+
+  // 2) File System Access folder (when opened directly in Chrome/Edge)
+  if (dirHandle && await ensurePerm(dirHandle)) {
+    try {
+      await saveImageToFolder(blob, name);
+      insertImg(editor, await loadImageFromFolder(name), name);
+      return;
+    } catch (e) { /* fall through */ }
+  }
+
+  // 3) Last resort: embed inline as a data URL
+  insertImg(editor, await blobToDataURL(blob), null);
+}
+
+/* hidden file input shared by all editors */
+let pendingEditor = null, pendingTerm = null, pendingSubdir = "";
+const fileInput = document.createElement("input");
+fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none";
+document.body.appendChild(fileInput);
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files[0];
+  if (f && pendingEditor) handleImageBlob(f, pendingEditor, pendingTerm, pendingSubdir);
+  fileInput.value = "";
+});
+
+/* --- mount one notes section (noteId namespaces storage; subdir routes images) --- */
+function mountNotes(root, noteId, subdir) {
+  subdir = subdir || "terms";
+  const editor = root.querySelector(".note-editor");
+  if (!editor) return;
+  const view = root.querySelector(".note-view");
+  const editArea = root.querySelector(".note-edit");
+  const editBtn = root.querySelector('[data-act="edit"]');
+  const saveBtn = root.querySelector('[data-act="save"]');
+  const cancelBtn = root.querySelector('[data-act="cancel"]');
+  const toolbar = root.querySelector(".note-toolbar");
+  let currentHtml = "";
+
+  function renderView() {
+    if (currentHtml && currentHtml.trim()) {
+      view.innerHTML = currentHtml;
+      if (!SERVER) rehydrate(view);
+    } else {
+      view.innerHTML = '<span class="empty-note">No notes yet. Click <b>Edit</b> to add notes.</span>';
+    }
+  }
+  function setMode(editing) {
+    editArea.hidden = !editing;
+    view.hidden = editing;
+    editBtn.hidden = editing;
+    saveBtn.hidden = !editing;
+    cancelBtn.hidden = !editing;
+  }
+
+  // load saved notes
+  if (SERVER) {
+    getServerNotes().then(notes => { currentHtml = (notes && notes[noteId]) || ""; renderView(); });
+  } else {
+    try { currentHtml = localStorage.getItem(NOTE_KEY(noteId)) || ""; } catch (e) {}
+    renderView();
+  }
+  updateFolderUI();
+
+  editBtn.addEventListener("click", () => {
+    editor.innerHTML = currentHtml;
+    if (!SERVER) rehydrate(editor);
+    setMode(true);
+    editor.focus();
+  });
+  cancelBtn.addEventListener("click", () => setMode(false));
+  saveBtn.addEventListener("click", () => {
+    currentHtml = serialize(editor);
+    saveNote(noteId, editor);
+    renderView();
+    setMode(false);
+  });
+
+  wireEditor(toolbar, editor, noteId, subdir);
+}
+
+/* shared rich-text wiring (used by notes + the Add-term/Add-QA modals) */
+function wireEditor(toolbar, editor, imgPrefix, subdir) {
+  const hasFolder = !!toolbar.querySelector('[data-act="folder"]');
+  toolbar.innerHTML = buildToolbarHTML(hasFolder);
+  toolbar.addEventListener("mousedown", e => e.preventDefault());
+  toolbar.addEventListener("click", e => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    const cmd = btn.dataset.cmd, act = btn.dataset.act, block = btn.dataset.block;
+    editor.focus();
+    if (cmd === "createLink") {
+      const url = prompt("Link URL:"); if (url) document.execCommand("createLink", false, url);
+    } else if (block) {
+      document.execCommand("formatBlock", false, block);
+    } else if (cmd) {
+      document.execCommand(cmd, false, null);
+    } else if (act === "code") {
+      wrapInlineCode(editor);
+    } else if (act === "br") {
+      document.execCommand("insertHTML", false, "<br>");
+    } else if (act === "hr") {
+      document.execCommand("insertHorizontalRule", false);
+    } else if (act === "image") {
+      pendingEditor = editor; pendingTerm = imgPrefix; pendingSubdir = subdir || ""; fileInput.click();
+    } else if (act === "folder") {
+      linkFolder();
+    } else if (act === "clear") {
+      editor.innerHTML = "";
+    }
+    editor.focus();
+  });
+  editor.addEventListener("paste", e => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    for (const it of items) {
+      if (it.type && it.type.indexOf("image/") === 0) {
+        e.preventDefault();
+        const blob = it.getAsFile();
+        if (blob) handleImageBlob(blob, editor, imgPrefix, subdir);
+        return;
+      }
+    }
+  });
+  // drag-and-drop image FILES (incl. animated .gif — dropped files keep their
+  // real MIME type, unlike clipboard paste which flattens a GIF to a static PNG)
+  editor.addEventListener("dragover", e => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) e.preventDefault();
+  });
+  editor.addEventListener("drop", e => {
+    const files = (e.dataTransfer && e.dataTransfer.files) || [];
+    const imgs = Array.from(files).filter(f => (f.type && f.type.indexOf("image/") === 0) || /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(f.name || ""));
+    if (!imgs.length) return;              // let non-image drops behave normally
+    e.preventDefault();
+    imgs.forEach(f => handleImageBlob(f, editor, imgPrefix, subdir));
+  });
+  editor.addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.shiftKey) {           // explicit line break
+      e.preventDefault();
+      document.execCommand("insertHTML", false, "<br>");
+    }
+    if (e.key === "Tab") {                            // tab -> indent, don't leave editor
+      e.preventDefault();
+      document.execCommand("insertHTML", false, "\u00a0\u00a0");
+    }
+  });
+}
+
+/* toolbar markup shared by every editor (folder button only where it existed) */
+function buildToolbarHTML(hasFolder) {
+  const groups = [
+    '<button class="note-btn" data-cmd="bold" title="Bold (Ctrl/\u2318+B)"><b>B</b></button>' +
+    '<button class="note-btn" data-cmd="italic" title="Italic (Ctrl/\u2318+I)"><i>I</i></button>' +
+    '<button class="note-btn" data-cmd="underline" title="Underline (Ctrl/\u2318+U)"><u>U</u></button>' +
+    '<button class="note-btn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>',
+
+    '<button class="note-btn" data-block="p" title="Paragraph / normal text">\u00b6</button>' +
+    '<button class="note-btn" data-block="h3" title="Heading"><b>H</b></button>' +
+    '<button class="note-btn" data-block="h4" title="Subheading">h</button>',
+
+    '<button class="note-btn" data-act="code" title="Inline code">&lt;/&gt;</button>' +
+    '<button class="note-btn" data-block="pre" title="Code block">{&nbsp;}</button>' +
+    '<button class="note-btn" data-block="blockquote" title="Quote">\u201d</button>',
+
+    '<button class="note-btn" data-cmd="insertUnorderedList" title="Bullet list">&bull;</button>' +
+    '<button class="note-btn" data-cmd="insertOrderedList" title="Numbered list">1.</button>',
+
+    '<button class="note-btn" data-cmd="justifyLeft" title="Align left">\u21e4</button>' +
+    '<button class="note-btn" data-cmd="justifyCenter" title="Align center">\u2194</button>' +
+    '<button class="note-btn" data-cmd="justifyRight" title="Align right">\u21e5</button>',
+
+    '<button class="note-btn" data-act="br" title="Line break (Shift+Enter)">\u21b5</button>' +
+    '<button class="note-btn" data-act="hr" title="Horizontal divider">\u2501</button>' +
+    '<button class="note-btn" data-cmd="removeFormat" title="Clear formatting">T\u00d7</button>',
+
+    '<button class="note-btn" data-cmd="createLink" title="Insert link">\ud83d\udd17</button>' +
+    '<button class="note-btn" data-act="image" title="Insert image from file">\ud83d\udcf7</button>' +
+    (hasFolder ? '<button class="note-btn" data-act="folder" title="Choose folder to store pasted images">\ud83d\udcc1</button>' : '') +
+    '<button class="note-btn muted" data-act="clear" title="Clear editor">\ud83d\uddd1</button>'
+  ];
+  return groups.join('<span class="note-sep"></span>');
+}
+
+/* wrap the current selection in inline <code>\u2026</code> (monospace) */
+function wrapInlineCode(editor) {
+  const sel = getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const text = sel.toString();
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  document.execCommand("insertHTML", false, "<code>" + (text ? esc(text) : "\u200b") + "</code>\u200b");
+}
+
+/* ---- Theme picker (shared across ALL SysDsg modules via a host cookie) ----
+   Cookies ignore port, so 127.0.0.1:8301..8308 + the hub all share one theme. */
+const themeSel = document.getElementById("theme");
+function _setCookie(k, v){ try { document.cookie = k + "=" + encodeURIComponent(v) + ";path=/;max-age=31536000;SameSite=Lax"; } catch(e){} }
+function _getCookie(k){ var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + k + "=([^;]+)")); return m ? decodeURIComponent(m[1]) : null; }
+function applyTheme(name) {
+  document.documentElement.setAttribute("data-theme", name);
+  if (themeSel) themeSel.value = name;
+  _setCookie("sysdsg_theme", name);
+  try { localStorage.setItem("agentai-theme", name); } catch (e) {}
+  if (typeof rerenderCurrentDoc === "function") rerenderCurrentDoc();
+}
+if (themeSel) themeSel.addEventListener("change", () => applyTheme(themeSel.value));
+let savedTheme = _getCookie("sysdsg_theme");
+if (!savedTheme) { try { savedTheme = localStorage.getItem("agentai-theme"); } catch (e) {} }
+applyTheme(savedTheme || "dark");
+document.addEventListener("visibilitychange", function(){
+  if (document.hidden) return;
+  var c = _getCookie("sysdsg_theme");
+  if (c && c !== document.documentElement.getAttribute("data-theme")) applyTheme(c);
+});
+/* ---- Floating Home button -> back to the hub landing page ---- */
+(function(){
+  var a = document.createElement("a");
+  a.id = "hub-home"; a.textContent = "\uD83E\uDDED";
+  a.title = "Back to System Design Hub"; a.setAttribute("aria-label", "Back to System Design Hub");
+  a.href = _getCookie("sysdsg_hub") || "http://127.0.0.1:8300/";
+  document.body.appendChild(a);
+  // header Home button (left of the nav-toggle) points at the same hub URL
+  var hb = document.getElementById("hub-home-btn");
+  if (hb) hb.href = _getCookie("sysdsg_hub") || "http://127.0.0.1:8300/";
+})();
+
+/* ---- Rebuild views after the term/QA list changes ---- */
+function refreshAllViews() {
+  renderSidebar(sidebarMode);
+  resetOverviewViews();
+  if (overview.classList.contains("show") && ovCtx === termsCtx) setOvView(ovView);
+}
+function refreshQAViews() {
+  if (navSection === "qa") renderSidebar(sidebarMode);
+  resetOverviewViews();
+  if (overview.classList.contains("show") && ovCtx === qaCtx) setOvView(ovView);
+}
+
+/* ---- Add-term modal ---- */
+const termModal = document.getElementById("term-modal");
+const ntTitle = document.getElementById("nt-title");
+const ntGroup = document.getElementById("nt-group");
+const ntLede = document.getElementById("nt-lede");
+const ntEditor = document.getElementById("nt-editor");
+const ntList = document.getElementById("nt-grouplist");
+wireEditor(document.getElementById("nt-toolbar"), ntEditor, "newterm", "terms");
+const ntHead = document.querySelector("#term-modal .modal-head h3");
+const ntCreateBtn = document.getElementById("nt-create");
+let editingTermId = null;
+
+function openTermModal(id) {
+  editingTermId = (id && customTerms[id]) ? id : null;
+  ntList.innerHTML = GROUPS.map(g => `<option value="${g.name}"></option>`).join("");
+  if (editingTermId) {
+    const t = customTerms[editingTermId];
+    ntTitle.value = t.title || ""; ntGroup.value = t.group || "";
+    ntLede.value = t.lede || ""; ntEditor.innerHTML = t.what || "";
+    ntHead.textContent = "Edit term"; ntCreateBtn.textContent = "Save changes";
+  } else {
+    ntTitle.value = ""; ntGroup.value = ""; ntLede.value = ""; ntEditor.innerHTML = "";
+    ntHead.textContent = "Add a term"; ntCreateBtn.textContent = "Create term";
+  }
+  termModal.classList.add("open");
+  ntTitle.focus();
+}
+function closeTermModal() { termModal.classList.remove("open"); }
+function createTerm() {
+  const title = ntTitle.value.trim();
+  if (!title) { ntTitle.focus(); return; }
+  const group = ntGroup.value.trim() || "My Terms";
+  const lede = ntLede.value.trim();
+  const what = ntEditor.innerHTML;
+  let id;
+  if (editingTermId) {
+    id = editingTermId;
+    const existing = stripRuntime(customTerms[editingTermId] || {});
+    // keep existing fields (why/apply/code/related/builtin); refresh tag when the group changes
+    const tag = (existing.group === group && existing.tag) ? existing.tag : tagLeaf(group);
+    persistCustomTerm({ ...existing, id, title, group, tag, lede, what });
+  } else {
+    id = uniqueId(slugify(title));
+    persistCustomTerm({ id, title, group, tag: tagLeaf(group), lede, what, custom: true });
+  }
+  rebuildData();
+  refreshAllViews();
+  closeTermModal();
+  select(id);
+}
+function deleteTerm(id) {
+  const t = customTerms[id];
+  if (!t) return;
+  if (!confirm(`Delete the term “${t.title}”? This also removes its notes and cannot be undone.`)) return;
+  delete customTerms[id];
+  if (SERVER) {
+    fetch("/terms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, _delete: true }) }).catch(() => {});
+    saveNoteToServer(id, "");
+  } else {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(serializeMap(customTerms))); } catch (e) {}
+    try { localStorage.removeItem(NOTE_KEY(id)); } catch (e) {}
+  }
+  rebuildData();
+  refreshAllViews();
+  closeDrawer();
+  const first = GROUPS[0] && GROUPS[0].terms[0];
+  if (first) select(first.id);
+}
+function mountTermActions(root, id) {
+  const e = root.querySelector('[data-act="edit-term"]');
+  const d = root.querySelector('[data-act="delete-term"]');
+  if (e) e.addEventListener("click", () => openTermModal(id));
+  if (d) d.addEventListener("click", () => deleteTerm(id));
+}
+document.getElementById("add-term-btn").addEventListener("click", () =>
+  navSection === "qa" ? openQAModal() : navSection === "topics" ? openTopicModal() : openTermModal());
+document.getElementById("nt-close").addEventListener("click", closeTermModal);
+document.getElementById("nt-cancel").addEventListener("click", closeTermModal);
+document.getElementById("nt-create").addEventListener("click", createTerm);
+termModal.addEventListener("click", e => { if (e.target === termModal) closeTermModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && termModal.classList.contains("open")) closeTermModal(); });
+
+/* ===================================================================
+   QA: Question/Answer items (tagged, same views as Terms)
+   =================================================================== */
+let qaItems = {};
+let QA_GROUPS = [];
+let QA_INDEX = {};
+const QA_KEY = "agentai-qa";
+
+function stripHtml(html) {
+  const d = document.createElement("div");
+  d.innerHTML = html || "";
+  return (d.textContent || "").replace(/\s+/g, " ").trim();
+}
+function rebuildQAData() {
+  QA_GROUPS = []; QA_INDEX = {};
+  const byName = {};
+  Object.values(qaItems).forEach(q => {
+    const qtext = stripHtml(q.question);
+    q.title = qtext.slice(0, 80) || "Untitled question";   // derived label (no title field)
+    q.lede = stripHtml(q.answer).slice(0, 160) || qtext;    // tooltip shows the answer preview
+    let g = byName[q.group];
+    if (!g) { g = { name: q.group, tag: tagLeaf(q.group), terms: [] }; byName[q.group] = g; QA_GROUPS.push(g); }
+    g.terms.push(q);
+    QA_INDEX[q.id] = q;
+  });
+  QA_GROUPS.forEach(g => g.terms.forEach(q => (q._group = g)));
+}
+async function loadQA() {
+  if (SERVER) {
+    try { const r = await fetch("/qa"); return r.ok ? await r.json() : {}; } catch (e) { return {}; }
+  }
+  try { return JSON.parse(localStorage.getItem(QA_KEY) || "{}"); } catch (e) { return {}; }
+}
+function persistQA(item) {
+  qaItems[item.id] = item;
+  if (SERVER) {
+    fetch("/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stripRuntime(item)) }).catch(() => {});
+  } else {
+    try { localStorage.setItem(QA_KEY, JSON.stringify(serializeMap(qaItems))); } catch (e) {}
+  }
+}
+function uniqueQAId(base) {
+  let id = base, i = 2;
+  while (QA_INDEX[id] || qaItems[id]) { id = base + "-" + i; i++; }
+  return id;
+}
+function qaDetailHTML(q) {
+  return `
+    <div class="crumbs"><span class="tag-chip">${q._group ? q._group.tag : q.group}</span></div>
+    <h2 class="term-title">${q.title}</h2>
+    <div class="term-actions">
+      <button class="note-action" data-act="edit-qa">&#9998; Edit</button>
+      <button class="note-action danger" data-act="delete-qa">&#128465; Delete</button>
+    </div>
+    <div class="section"><h3>Question</h3><div class="rich">${q.question || ""}</div></div>
+    <div class="section"><h3>Answer</h3><div class="rich">${q.answer || ""}</div></div>
+    ${notesSectionHTML()}
+  `;
+}
+const qaNoteId = id => "qa__" + id;   // namespace QA notes so they never collide with term notes
+function mountQAActions(root, id) {
+  const e = root.querySelector('[data-act="edit-qa"]');
+  const d = root.querySelector('[data-act="delete-qa"]');
+  if (e) e.addEventListener("click", () => openQAModal(id));
+  if (d) d.addEventListener("click", () => deleteQA(id));
+}
+function openQADrawer(id) {
+  const q = QA_INDEX[id];
+  if (!q) return;
+  drawerTag.textContent = q._group ? q._group.tag : q.group;
+  drawerBody.innerHTML = qaDetailHTML(q);
+  highlightPlainCodeBlocks(drawerBody);
+  mountQAActions(drawerBody, id);
+  mountNotes(drawerBody, qaNoteId(id), "qa");
+  drawerBody.scrollTop = 0;
+  backdrop.classList.add("open");
+  drawer.classList.add("open");
+}
+
+/* QA modal (no title — Question + Answer + Tags) */
+const qaModal = document.getElementById("qa-modal");
+const qaGroup = document.getElementById("qa-group");
+const qaQ = document.getElementById("qa-q-editor");
+const qaA = document.getElementById("qa-a-editor");
+const qaList = document.getElementById("qa-grouplist");
+const qaHead = document.querySelector("#qa-modal .modal-head h3");
+const qaCreateBtn = document.getElementById("qa-create");
+wireEditor(document.getElementById("qa-q-toolbar"), qaQ, "qa-q", "qa");
+wireEditor(document.getElementById("qa-a-toolbar"), qaA, "qa-a", "qa");
+let editingQAId = null;
+
+function openQAModal(id) {
+  editingQAId = (id && qaItems[id]) ? id : null;
+  qaList.innerHTML = QA_GROUPS.map(g => `<option value="${g.name}"></option>`).join("");
+  if (editingQAId) {
+    const q = qaItems[id];
+    qaGroup.value = q.group || "";
+    qaQ.innerHTML = q.question || ""; qaA.innerHTML = q.answer || "";
+    qaHead.textContent = "Edit Q&A"; qaCreateBtn.textContent = "Save changes";
+  } else {
+    qaGroup.value = ""; qaQ.innerHTML = ""; qaA.innerHTML = "";
+    qaHead.textContent = "Add a Q&A"; qaCreateBtn.textContent = "Create Q&A";
+  }
+  qaModal.classList.add("open");
+  qaQ.focus();
+}
+function closeQAModal() { qaModal.classList.remove("open"); }
+function createQA() {
+  const question = qaQ.innerHTML;
+  if (!stripHtml(question)) { qaQ.focus(); return; }   // question is required
+  const group = qaGroup.value.trim() || "My Q&A";
+  const id = editingQAId || uniqueQAId(slugify(stripHtml(question).slice(0, 40)) || "qa");
+  const item = { id, group, question, answer: qaA.innerHTML, qa: true };
+  persistQA(item);
+  rebuildQAData();
+  refreshQAViews();
+  closeQAModal();
+  selectQA(id);
+}
+function deleteQA(id) {
+  const q = qaItems[id];
+  if (!q) return;
+  if (!confirm(`Delete this Q&A? This cannot be undone.`)) return;
+  delete qaItems[id];
+  if (SERVER) {
+    fetch("/qa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, _delete: true }) }).catch(() => {});
+    saveNoteToServer(qaNoteId(id), "");
+  } else {
+    try { localStorage.setItem(QA_KEY, JSON.stringify(serializeMap(qaItems))); } catch (e) {}
+    try { localStorage.removeItem(NOTE_KEY(qaNoteId(id))); } catch (e) {}
+  }
+  rebuildQAData();
+  refreshQAViews();
+  closeDrawer();
+  if (currentQAId === id) {
+    currentQAId = null;
+    const firstQA = QA_GROUPS[0] && QA_GROUPS[0].terms[0];
+    if (firstQA) selectQA(firstQA.id);
+    else if (GROUPS[0]) select(GROUPS[0].terms[0].id);
+  }
+}
+document.getElementById("qa-close").addEventListener("click", closeQAModal);
+document.getElementById("qa-cancel").addEventListener("click", closeQAModal);
+qaCreateBtn.addEventListener("click", createQA);
+qaModal.addEventListener("click", e => { if (e.target === qaModal) closeQAModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && qaModal.classList.contains("open")) closeQAModal(); });
+
+/* ===================================================================
+   Topics: titled pages (Title + Summary + Content), tagged, with the
+   same sidebar / overview / drawer / notes behaviour as Terms and QA.
+   =================================================================== */
+let topicItems = {};
+let TOPIC_GROUPS = [];
+let TOPIC_INDEX = {};
+const TOPIC_KEY = "agentai-topics";
+
+function rebuildTopicData() {
+  TOPIC_GROUPS = []; TOPIC_INDEX = {};
+  const byName = {};
+  Object.values(topicItems).forEach(t => {
+    t.title = t.title || "Untitled topic";
+    // summary drives the tooltip / overview card; fall back to the content
+    t.lede = t.summary || stripHtml(t.content).slice(0, 160);
+    let g = byName[t.group];
+    if (!g) { g = { name: t.group, tag: tagLeaf(t.group), terms: [] }; byName[t.group] = g; TOPIC_GROUPS.push(g); }
+    g.terms.push(t);
+    TOPIC_INDEX[t.id] = t;
+  });
+  TOPIC_GROUPS.forEach(g => g.terms.forEach(t => (t._group = g)));
+}
+async function loadTopics() {
+  if (SERVER) {
+    try { const r = await fetch("/topics"); return r.ok ? await r.json() : {}; } catch (e) { return {}; }
+  }
+  try { return JSON.parse(localStorage.getItem(TOPIC_KEY) || "{}"); } catch (e) { return {}; }
+}
+function persistTopic(item) {
+  topicItems[item.id] = item;
+  if (SERVER) {
+    fetch("/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stripRuntime(item)) }).catch(() => {});
+  } else {
+    try { localStorage.setItem(TOPIC_KEY, JSON.stringify(serializeMap(topicItems))); } catch (e) {}
+  }
+}
+function uniqueTopicId(base) {
+  let id = base, i = 2;
+  while (TOPIC_INDEX[id] || topicItems[id]) { id = base + "-" + i; i++; }
+  return id;
+}
+function topicDetailHTML(t) {
+  return `
+    <div class="crumbs"><span class="tag-chip">${t._group ? t._group.tag : t.group}</span></div>
+    <h2 class="term-title">${t.title}</h2>
+    ${t.summary ? `<p class="lede">${t.summary}</p>` : ""}
+    <div class="term-actions">
+      <button class="note-action" data-act="edit-topic">&#9998; Edit</button>
+      <button class="note-action danger" data-act="delete-topic">&#128465; Delete</button>
+    </div>
+    ${t.content ? `<div class="section"><h3>Content</h3><div class="rich">${t.content}</div></div>` : ""}
+    ${notesSectionHTML()}
+  `;
+}
+const topicNoteId = id => "topic__" + id;   // namespace so topic notes never collide
+function mountTopicActions(root, id) {
+  const e = root.querySelector('[data-act="edit-topic"]');
+  const d = root.querySelector('[data-act="delete-topic"]');
+  if (e) e.addEventListener("click", () => openTopicModal(id));
+  if (d) d.addEventListener("click", () => deleteTopic(id));
+}
+function openTopicDrawer(id) {
+  const t = TOPIC_INDEX[id];
+  if (!t) return;
+  drawerTag.textContent = t._group ? t._group.tag : t.group;
+  drawerBody.innerHTML = topicDetailHTML(t);
+  highlightPlainCodeBlocks(drawerBody);
+  attachLinkPreviews(drawerBody);
+  mountTopicActions(drawerBody, id);
+  mountNotes(drawerBody, topicNoteId(id), "topics");
+  drawerBody.scrollTop = 0;
+  backdrop.classList.add("open");
+  drawer.classList.add("open");
+}
+function refreshTopicViews() {
+  if (navSection === "topics") renderSidebar(sidebarMode);
+  resetOverviewViews();
+  if (overview.classList.contains("show") && ovCtx === topicsCtx) setOvView(ovView);
+}
+
+/* Topic modal (Title + Summary + Content + Tags) */
+const topicModal = document.getElementById("topic-modal");
+const topicGroup = document.getElementById("topic-group");
+const topicTitle = document.getElementById("topic-title");
+const topicSummary = document.getElementById("topic-summary");
+const topicContent = document.getElementById("topic-content-editor");
+const topicList = document.getElementById("topic-grouplist");
+const topicHead = document.querySelector("#topic-modal .modal-head h3");
+const topicCreateBtn = document.getElementById("topic-create");
+wireEditor(document.getElementById("topic-content-toolbar"), topicContent, "topic-content", "topics");
+let editingTopicId = null;
+
+function openTopicModal(id) {
+  editingTopicId = (id && topicItems[id]) ? id : null;
+  topicList.innerHTML = TOPIC_GROUPS.map(g => `<option value="${g.name}"></option>`).join("");
+  if (editingTopicId) {
+    const t = topicItems[id];
+    topicGroup.value = t.group || "";
+    topicTitle.value = t.title || "";
+    topicSummary.value = t.summary || "";
+    topicContent.innerHTML = t.content || "";
+    topicHead.textContent = "Edit Topic"; topicCreateBtn.textContent = "Save changes";
+  } else {
+    topicGroup.value = ""; topicTitle.value = ""; topicSummary.value = ""; topicContent.innerHTML = "";
+    topicHead.textContent = "Add a Topic"; topicCreateBtn.textContent = "Create Topic";
+  }
+  topicModal.classList.add("open");
+  topicTitle.focus();
+}
+function closeTopicModal() { topicModal.classList.remove("open"); }
+function createTopic() {
+  const title = topicTitle.value.trim();
+  if (!title) { topicTitle.focus(); return; }             // title is required
+  const group = topicGroup.value.trim() || "My Topics";
+  const id = editingTopicId || uniqueTopicId(slugify(title.slice(0, 40)) || "topic");
+  const item = { id, group, title, summary: topicSummary.value.trim(),
+                 content: topicContent.innerHTML, topic: true };
+  persistTopic(item);
+  rebuildTopicData();
+  refreshTopicViews();
+  closeTopicModal();
+  selectTopic(id);
+}
+function deleteTopic(id) {
+  const t = topicItems[id];
+  if (!t) return;
+  if (!confirm(`Delete this topic? This cannot be undone.`)) return;
+  delete topicItems[id];
+  if (SERVER) {
+    fetch("/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, _delete: true }) }).catch(() => {});
+    saveNoteToServer(topicNoteId(id), "");
+  } else {
+    try { localStorage.setItem(TOPIC_KEY, JSON.stringify(serializeMap(topicItems))); } catch (e) {}
+    try { localStorage.removeItem(NOTE_KEY(topicNoteId(id))); } catch (e) {}
+  }
+  rebuildTopicData();
+  refreshTopicViews();
+  closeDrawer();
+  if (currentTopicId === id) {
+    currentTopicId = null;
+    const firstTopic = TOPIC_GROUPS[0] && TOPIC_GROUPS[0].terms[0];
+    if (firstTopic) selectTopic(firstTopic.id);
+    else if (GROUPS[0]) select(GROUPS[0].terms[0].id);
+  }
+}
+document.getElementById("topic-close").addEventListener("click", closeTopicModal);
+document.getElementById("topic-cancel").addEventListener("click", closeTopicModal);
+topicCreateBtn.addEventListener("click", createTopic);
+topicModal.addEventListener("click", e => { if (e.target === topicModal) closeTopicModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && topicModal.classList.contains("open")) closeTopicModal(); });
+
+/* ===================================================================
+   Search: full-text across all Term + QA content (and notes), with
+   context snippets, click-to-open, and "fetch more" pagination
+   =================================================================== */
+const searchInputEl = document.getElementById("search-input");
+const searchResults = document.getElementById("search-results");
+const searchSummary = document.getElementById("search-summary");
+const searchMore = document.getElementById("search-more");
+const SEARCH_PAGE = 25;
+let searchHits = [], searchShown = 0, notesIndex = {};
+
+function getNotesIndex() {
+  if (SERVER) return getServerNotes();
+  const out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("agentai-note:") === 0) out[k.slice(13)] = localStorage.getItem(k);
+    }
+  } catch (e) {}
+  return Promise.resolve(out);
+}
+function snippetHTML(text, idx, len) {
+  const pad = 110;                                   // ~a line of context each side
+  const s = Math.max(0, idx - pad), e = Math.min(text.length, idx + len + pad);
+  return (s > 0 ? "… " : "") + escapeHtml(text.slice(s, idx)) +
+         "<mark>" + escapeHtml(text.slice(idx, idx + len)) + "</mark>" +
+         escapeHtml(text.slice(idx + len, e)) + (e < text.length ? " …" : "");
+}
+function fieldsOf(item, type) {
+  const f = [];
+  if (type === "Term") {
+    f.push(["Title", item.title], ["Summary", item.lede || ""],
+           [item.builtin ? "What it is" : "Details", stripHtml(item.what || "")],
+           ["Why", item.why || ""], ["How to apply", (item.apply || []).join("  •  ")],
+           ["Example", item.code || ""]);
+  } else if (type === "Topic") {
+    f.push(["Title", item.title], ["Summary", item.summary || ""],
+           ["Content", stripHtml(item.content || "")]);
+  } else {
+    f.push(["Title", item.title], ["Question", stripHtml(item.question || "")],
+           ["Answer", stripHtml(item.answer || "")]);
+  }
+  const nid = type === "QA" ? qaNoteId(item.id) : type === "Topic" ? topicNoteId(item.id) : item.id;
+  if (notesIndex[nid]) f.push(["Notes", stripHtml(notesIndex[nid])]);
+  return f;
+}
+function computeHits(q) {
+  const ql = q.toLowerCase(), hits = [];
+  function scan(item, type, open) {
+    fieldsOf(item, type).forEach(([name, text]) => {
+      if (!text) return;
+      const tl = text.toLowerCase();
+      let idx = tl.indexOf(ql);
+      while (idx !== -1) {
+        hits.push({ id: item.id, title: item.title, type, field: name, html: snippetHTML(text, idx, q.length), open });
+        idx = tl.indexOf(ql, idx + ql.length);
+      }
+    });
+  }
+  Object.values(TERMS).forEach(t => scan(t, "Term", () => select(t.id)));
+  Object.values(QA_INDEX).forEach(t => scan(t, "QA", () => selectQA(t.id)));
+  Object.values(TOPIC_INDEX).forEach(t => scan(t, "Topic", () => selectTopic(t.id)));
+  // docs: search line-by-line so each hit links to its exact line in the doc.
+  // HTML docs render in an iframe, so we can't scroll to a line — scan their
+  // extracted `text` instead and just open the doc.
+  DOCS.forEach(d => {
+    const isFrame = d.type === "html";
+    const body = isFrame ? (d.text || "") : (d.markdown || "");
+    body.replace(/\r\n?/g, "\n").split("\n").forEach((ln, li) => {
+      const tl = ln.toLowerCase();
+      let idx = tl.indexOf(ql);
+      while (idx !== -1) {
+        hits.push({ id: d.name, title: d.title || d.name, type: "Doc",
+          field: isFrame ? "Content" : "Line " + (li + 1),
+          html: snippetHTML(ln, idx, q.length),
+          open: isFrame ? () => selectDoc(d.name) : () => openDocAt(d.name, li, q) });
+        idx = tl.indexOf(ql, idx + ql.length);
+      }
+    });
+  });
+  return hits;
+}
+function renderSearchPage() {
+  searchHits.slice(searchShown, searchShown + SEARCH_PAGE).forEach(h => {
+    const el = document.createElement("div");
+    el.className = "sr-hit";
+    el.innerHTML = `<div class="sr-meta"><span class="sr-type">${h.type}</span>` +
+      `<span class="sr-title">${escapeHtml(h.title)}</span><span class="sr-field">${h.field}</span></div>` +
+      `<div class="sr-snippet">${h.html}</div>`;
+    el.addEventListener("click", h.open);
+    searchResults.appendChild(el);
+  });
+  searchShown = Math.min(searchShown + SEARCH_PAGE, searchHits.length);
+  searchMore.innerHTML = "";
+  const remaining = searchHits.length - searchShown;
+  if (remaining > 0) {
+    const btn = document.createElement("button");
+    btn.className = "sr-more-btn";
+    btn.textContent = `Fetch more (${remaining} more)`;
+    btn.addEventListener("click", renderSearchPage);
+    searchMore.appendChild(btn);
+  }
+}
+function runSearch(q) {
+  q = (q || "").trim();
+  searchResults.innerHTML = ""; searchMore.innerHTML = ""; searchShown = 0; searchHits = [];
+  if (!q) { searchSummary.textContent = ""; searchResults.innerHTML = '<div class="sr-empty">Type to search the full text of every Term and QA (including notes).</div>'; return; }
+  searchHits = computeHits(q);
+  const items = new Set(searchHits.map(h => h.type + h.id)).size;
+  searchSummary.innerHTML = searchHits.length
+    ? `<b>${searchHits.length}</b> occurrence${searchHits.length > 1 ? "s" : ""} across <b>${items}</b> item${items > 1 ? "s" : ""}`
+    : "No matches.";
+  renderSearchPage();
+}
+function openSearch() {
+  Promise.all([getNotesIndex(), loadDocs()]).then(([idx]) => { notesIndex = idx || {}; runSearch(searchInputEl.value); });
+  setTimeout(() => searchInputEl.focus(), 0);
+}
+let searchTimer = null;
+searchInputEl.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => runSearch(searchInputEl.value), 150);
+});
+
+/* ---- Docs (renders .md files from the ./docs/ folder in the main pane) ---- */
+let DOCS = [], docsLoaded = false, currentDocName = null;
+
+async function loadDocs() {
+  if (docsLoaded) return DOCS;
+  docsLoaded = true;
+  if (SERVER) {
+    try {
+      const r = await fetch("/docs");
+      if (r.ok) DOCS = await r.json();
+    } catch (e) { DOCS = []; }
+  }
+  return DOCS;
+}
+
+/* --- inline markdown (bold / italic / code / links / images) --- */
+function mdInline(s) {
+  s = escapeHtml(s);
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+[^)]*)?\)/g, (m, alt, src) => `<img alt="${alt}" src="${src}">`);
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+[^)]*)?\)/g, (m, t, h) => `<a href="${h}" target="_blank" rel="noopener">${t}</a>`);
+  s = s.replace(/`([^`]+)`/g, (m, c) => `<code>${c}</code>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  s = s.replace(/(^|[^_\w])_([^_\n]+)_/g, "$1<em>$2</em>");
+  return s;
+}
+
+/* --- block markdown -> HTML; each block carries data-line for search jumps --- */
+function renderMarkdown(md) {
+  const lines = (md || "").replace(/\r\n?/g, "\n").split("\n");
+  const at = n => ` data-line="${n}"`;
+  const listRe = /^\s*([-*+]|\d+\.)\s+/;
+  let html = "", i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^\s*```(.*)$/);
+    if (fence) {
+      const start = i; i++;
+      const buf = [];
+      while (i < lines.length && !/^\s*```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++;                                                   // consume closing fence
+      const lang = (fence[1] || "").trim().toLowerCase();
+      if (lang === "mermaid") {
+        // emit a mermaid block; renderMermaid() turns it into an SVG after the doc mounts.
+        // escaped source is the element's textContent, which mermaid reads verbatim.
+        html += `<pre class="mermaid"${at(start)}>${escapeHtml(buf.join("\n"))}</pre>`;
+      } else {
+        // only colorize fences that declare a language; bare ``` fences in these
+        // docs are ASCII diagrams / prose flows, which highlighting would just noise up.
+        const src = buf.join("\n");
+        html += `<pre${at(start)}><code>${lang ? highlightCode(src) : escapeHtml(src)}</code></pre>`;
+      }
+      continue;
+    }
+    const h = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (h) { html += `<h${h[1].length}${at(i)}>${mdInline(h[2].trim())}</h${h[1].length}>`; i++; continue; }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { html += `<hr${at(i)}>`; i++; continue; }
+    // table: header row followed by a |---|---| separator
+    if (line.includes("|") && i + 1 < lines.length &&
+        /-/.test(lines[i + 1]) && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i + 1])) {
+      const start = i;
+      const row = r => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+      const heads = row(line); i += 2;
+      let body = "";
+      while (i < lines.length && lines[i].includes("|") && !/^\s*$/.test(lines[i])) {
+        body += "<tr>" + row(lines[i]).map(c => `<td>${mdInline(c)}</td>`).join("") + "</tr>"; i++;
+      }
+      html += `<table${at(start)}><thead><tr>${heads.map(c => `<th>${mdInline(c)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+      continue;
+    }
+    if (/^\s*>/.test(line)) {
+      const start = i; const buf = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+      html += `<blockquote${at(start)}>${mdInline(buf.join(" "))}</blockquote>`;
+      continue;
+    }
+    if (listRe.test(line)) {
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      const start = i; let items = "";
+      while (i < lines.length && listRe.test(lines[i])) {
+        items += `<li${at(i)}>${mdInline(lines[i].replace(listRe, ""))}</li>`; i++;
+      }
+      html += `<${ordered ? "ol" : "ul"}${at(start)}>${items}</${ordered ? "ol" : "ul"}>`;
+      continue;
+    }
+    if (/^\s*$/.test(line)) { i++; continue; }
+    const start = i; const buf = [];
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^\s*(#{1,6})\s/.test(lines[i]) &&
+           !/^\s*```/.test(lines[i]) && !/^\s*>/.test(lines[i]) && !listRe.test(lines[i]) &&
+           !/^\s*([-*_])(\s*\1){2,}\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+    html += `<p${at(start)}>${mdInline(buf.join(" "))}</p>`;
+  }
+  return html;
+}
+
+/* open a doc in the main pane (its title stays highlighted in the Docs sidebar) */
+/* show the reading pane with the Docs top-tab highlighted */
+function showDocsPane() {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === "docs"));
+  overview.classList.remove("show");
+  searchView.classList.remove("show");
+  main.style.display = "block";
+  if (typeof stopGlobe === "function") stopGlobe();
+}
+
+/* pick a mermaid theme from the current background luminance, so diagrams
+   match whichever app theme is active (dark vs light family) */
+function mermaidThemeForCurrent() {
+  try {
+    const m = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
+    if (!m) return "default";
+    const [r, g, b] = m.map(Number);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128 ? "dark" : "default";
+  } catch (e) { return "default"; }
+}
+
+/* turn any <pre class="mermaid"> in `container` into an SVG diagram.
+   On failure the source stays visible in the code box, so a bad diagram
+   degrades to text rather than vanishing. */
+function renderMermaid(container) {
+  if (!window.mermaid) return;
+  const nodes = container.querySelectorAll("pre.mermaid:not(.mermaid-rendered):not(.mermaid-error)");
+  if (!nodes.length) return;
+  try {
+    window.mermaid.initialize({ startOnLoad: false, theme: mermaidThemeForCurrent(),
+      securityLevel: "strict", flowchart: { htmlLabels: true } });
+  } catch (e) {}
+  nodes.forEach((node, idx) => {
+    const src = node.textContent;
+    const id = "mmd-" + idx + "-" + (mermaidRenderSeq++);
+    try {
+      window.mermaid.render(id, src).then(({ svg }) => {
+        node.innerHTML = svg;
+        node.classList.add("mermaid-rendered");
+      }).catch(() => node.classList.add("mermaid-error"));
+    } catch (e) { node.classList.add("mermaid-error"); }
+  });
+}
+let mermaidRenderSeq = 0;
+
+/* re-render the current markdown doc so mermaid picks up a new theme.
+   applyTheme() runs at startup before DOCS/currentDocName are initialized
+   (they are `let`s in the temporal dead zone), so guard with try/catch —
+   a throw here just means "nothing to re-render yet". */
+function rerenderCurrentDoc() {
+  try {
+    if (!currentDocName || !DOCS) return;
+    const d = DOCS.find(x => x.name === currentDocName);
+    if (d && d.type !== "pdf") renderDoc(currentDocName);
+  } catch (e) { /* app not initialized yet — no doc to re-render */ }
+}
+
+/* render one doc's markdown into the main pane */
+/* ---- Link quick-view -------------------------------------------------------
+   Adds a 👁 icon after links that point at a fetchable text file (GitHub blob /
+   raw URLs, or any *.md/.py/.json/... link). Hovering the icon fetches the file
+   and shows a scrollable preview. raw.githubusercontent.com sends
+   `access-control-allow-origin: *`, so the cross-origin fetch is allowed. */
+const LP_CACHE = new Map();
+const LP_TEXT_EXT = /\.(md|markdown|txt|py|js|ts|json|ya?ml|toml|sh|java|go|rs|sql|proto)(\?.*)?$/i;
+
+function toRawUrl(href) {
+  const blob = href.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
+  if (blob) return `https://raw.githubusercontent.com/${blob[1]}/${blob[2]}/${blob[3]}`;
+  if (/^https:\/\/raw\.githubusercontent\.com\//.test(href)) return href;
+  if (/^https?:\/\//.test(href) && LP_TEXT_EXT.test(href)) return href;
+  return null;                                   // not previewable
+}
+
+let lpPop = null, lpHideTimer = null, lpOverPop = false;
+function lpEl() {
+  if (lpPop) return lpPop;
+  lpPop = document.createElement("div");
+  lpPop.className = "lp-pop";
+  lpPop.addEventListener("mouseenter", () => { lpOverPop = true; clearTimeout(lpHideTimer); });
+  lpPop.addEventListener("mouseleave", () => { lpOverPop = false; lpHide(); });
+  document.body.appendChild(lpPop);
+  return lpPop;
+}
+function lpHide() {
+  clearTimeout(lpHideTimer);
+  lpHideTimer = setTimeout(() => { if (!lpOverPop) lpEl().classList.remove("show"); }, 260);
+}
+function lpPosition(icon) {
+  const pop = lpEl(), r = icon.getBoundingClientRect();
+  pop.style.visibility = "hidden"; pop.classList.add("show");
+  const pr = pop.getBoundingClientRect();
+  let left = Math.min(r.left, window.innerWidth - pr.width - 12);
+  let top = r.bottom + 8;
+  if (top + pr.height > window.innerHeight - 10) top = Math.max(10, r.top - pr.height - 8);
+  pop.style.left = Math.max(10, left) + "px";
+  pop.style.top = top + "px";
+  pop.style.visibility = "";
+}
+
+async function lpShow(icon, href, rawUrl) {
+  const pop = lpEl();
+  const name = decodeURIComponent(rawUrl.split("/").pop() || "file");
+  const head = `<div class="lp-head"><span class="lp-name">${escapeHtml(name)}</span>` +
+               `<a class="lp-open" href="${href}" target="_blank" rel="noopener">Open ↗</a></div>`;
+  if (!LP_CACHE.has(rawUrl)) {
+    pop.innerHTML = head + `<div class="lp-body" style="color:var(--muted)">Loading…</div>`;
+    lpPosition(icon);
+    try {
+      const res = await fetch(rawUrl);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      LP_CACHE.set(rawUrl, await res.text());
+    } catch (e) {
+      LP_CACHE.set(rawUrl, null);
+    }
+  }
+  const text = LP_CACHE.get(rawUrl);
+  if (text === null || text === undefined) {
+    pop.innerHTML = head + `<div class="lp-body" style="color:var(--muted)">` +
+      `Couldn't fetch this file (offline, or the host blocks cross-origin reads). Use <b>Open ↗</b>.</div>`;
+  } else {
+    const LIMIT = 12000;
+    const clipped = text.length > LIMIT;
+    const src = clipped ? text.slice(0, LIMIT) : text;
+    const body = /\.(md|markdown)(\?.*)?$/i.test(rawUrl)
+      ? renderMarkdown(src)
+      : `<pre><code>${highlightCode(src)}</code></pre>`;
+    pop.innerHTML = head + `<div class="lp-body">${body}` +
+      (clipped ? `<div class="lp-fade">… truncated — open the file for the rest.</div>` : "") +
+      `</div>`;
+  }
+  lpPosition(icon);
+}
+
+function attachLinkPreviews(root) {
+  if (!root) return;
+  root.querySelectorAll("a[href]").forEach(a => {
+    if (a.dataset.lp === "1") return;
+    const raw = toRawUrl(a.getAttribute("href") || "");
+    if (!raw) return;
+    a.dataset.lp = "1";
+    const icon = document.createElement("span");
+    icon.className = "lp-icon";
+    icon.textContent = "👁";
+    icon.title = "Quick view";
+    let hoverTimer = null;
+    icon.addEventListener("mouseenter", () => {
+      clearTimeout(lpHideTimer);
+      hoverTimer = setTimeout(() => lpShow(icon, a.href, raw), 140);
+    });
+    icon.addEventListener("mouseleave", () => { clearTimeout(hoverTimer); lpHide(); });
+    icon.addEventListener("click", e => { e.preventDefault(); lpShow(icon, a.href, raw); });
+    a.insertAdjacentElement("afterend", icon);
+  });
+}
+
+/* --- doc tags: shown above every doc, editable in place --- */
+const escAttr = s => escapeHtml(String(s == null ? "" : s)).replace(/"/g, "&quot;");
+function docTagBarHTML(doc) {
+  const tag = docTagOf(doc);
+  const untagged = tag === UNTAGGED;
+  const crumbs = tagParts(tag).map(p => escapeHtml(p)).join(" <span style=\"opacity:.5\">›</span> ");
+  return `<div class="doc-tagbar">` +
+    `<span class="lbl">Tag</span>` +
+    `<span class="tag-chip" data-act="edit-tag" title="Click to change this doc's tag"` +
+      (untagged ? ` style="opacity:.7"` : "") + `>${untagged ? "Untagged" : crumbs}</span>` +
+    (doc.tags || []).map(t => `<span class="doc-label">${escapeHtml(t)}</span>`).join("") +
+    `<span class="spacer"></span>` +
+    (SERVER ? `<button class="note-action" data-act="edit-tag">&#9998; Edit tags</button>` : "") +
+    `</div>`;
+}
+
+function mountDocTagBar(root, doc) {
+  const bar = root.querySelector(".doc-tagbar");
+  if (!bar || !SERVER) return;
+  bar.querySelectorAll('[data-act="edit-tag"]').forEach(el =>
+    el.addEventListener("click", () => openDocTagEditor(bar, doc)));
+}
+
+function openDocTagEditor(bar, doc) {
+  const tag = docTagOf(doc) === UNTAGGED ? "" : docTagOf(doc);
+  const listId = "doc-tag-options";
+  bar.innerHTML =
+    `<div class="doc-tagedit">` +
+      `<span class="lbl">Tag</span>` +
+      `<input id="doc-tag-input" list="${listId}" placeholder="e.g. Caching::Strategies — use :: to nest" value="${escAttr(tag)}">` +
+      `<datalist id="${listId}">${knownDocTags().map(t => `<option value="${escAttr(t)}"></option>`).join("")}</datalist>` +
+      `<input id="doc-label-input" placeholder="labels, comma separated" value="${escAttr((doc.tags || []).join(', '))}">` +
+      `<button class="note-action primary" data-act="save">Save</button>` +
+      `<button class="note-action" data-act="cancel">Cancel</button>` +
+      (docTagOf(doc) === UNTAGGED ? "" : `<button class="note-action danger" data-act="untag">Untag</button>`) +
+    `</div>`;
+  const tagInput = bar.querySelector("#doc-tag-input");
+  const labelInput = bar.querySelector("#doc-label-input");
+  const commit = value => saveDocTag(doc.name, value,
+    labelInput.value.split(",").map(s => s.trim()).filter(Boolean));
+  tagInput.focus();
+  tagInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") commit(tagInput.value);
+    if (e.key === "Escape") refreshDocTagBar();
+  });
+  bar.querySelector('[data-act="save"]').addEventListener("click", () => commit(tagInput.value));
+  bar.querySelector('[data-act="cancel"]').addEventListener("click", refreshDocTagBar);
+  const untagBtn = bar.querySelector('[data-act="untag"]');
+  if (untagBtn) untagBtn.addEventListener("click", () => commit(""));
+}
+
+function refreshDocTagBar() {
+  const doc = DOCS.find(d => d.name === currentDocName);
+  const bar = detail.querySelector(".doc-tagbar") || detail.querySelector(".doc-tagedit")?.parentElement;
+  if (!doc || !bar) return;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = docTagBarHTML(doc);
+  bar.replaceWith(wrap.firstElementChild);
+  mountDocTagBar(detail, doc);
+}
+
+async function postDocTags(payload) {
+  try {
+    const r = await fetch("/doctags", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const { doctags } = await r.json();
+    DOCS.forEach(d => {
+      const meta = doctags[d.name] || {};
+      d.tag = (meta.tag || "").trim();
+      d.tags = meta.tags || [];
+    });
+    renderSidebar(sidebarMode);
+    if (currentDocName) { markActive(currentDocName); refreshDocTagBar(); }
+    return true;
+  } catch (e) {
+    alert("Could not save the tag — is the local server running?\n" + e);
+    return false;
+  }
+}
+
+function saveDocTag(name, tag, labels) { return postDocTags({ name, tag, tags: labels }); }
+function renameDocTag(path) {
+  const next = prompt(`Rename tag "${path}" to:\n(use :: to nest — sub-tags move with it)`, path);
+  if (next === null) return;
+  const clean = next.trim();
+  if (!clean || clean === path) return;
+  postDocTags({ _rename: path, to: clean });
+}
+function deleteDocTag(path) {
+  const n = DOCS.filter(d => { const t = docTagOf(d); return t === path || t.startsWith(path + "::"); }).length;
+  if (!confirm(`Delete tag "${path}"?\n${n} doc(s) become Untagged — the files themselves are untouched.`)) return;
+  postDocTags({ _deleteTag: path });
+}
+
+function renderDoc(name) {
+  const doc = DOCS.find(d => d.name === name);
+  if (!doc) return false;
+  currentDocName = name;
+  markActive(name);
+  const tagBar = docTagBarHTML(doc);
+  if (doc.type === "pdf" || doc.type === "html") {
+    // both render in an isolated iframe — an HTML doc keeps its own CSS/JS
+    // instead of clashing with the app's stylesheet.
+    detail.innerHTML = tagBar +
+      `<div class="pdf-view">` +
+        `<div class="pdf-bar"><span class="pdf-name">${escapeHtml(doc.title || doc.name)}</span>` +
+        `<a href="${doc.url}" target="_blank" rel="noopener">Open in new tab ↗</a></div>` +
+        `<iframe class="pdf-frame" src="${doc.url}" title="${escapeHtml(doc.name)}"></iframe>` +
+      `</div>`;
+  } else {
+    detail.innerHTML = tagBar + `<div class="markdown-body">${renderMarkdown(doc.markdown)}</div>`;
+    renderMermaid(detail);
+    attachLinkPreviews(detail);
+  }
+  mountDocTagBar(detail, doc);
+  history.replaceState(null, "", "#doc/" + encodeURIComponent(name));
+  main.scrollTop = 0;
+  return true;
+}
+
+/* entry point for the Docs tab (top tab or sidebar tab): show a doc, or a hint if none */
+function enterDocs() {
+  loadDocs().then(() => {
+    setNavSection("docs");
+    showDocsPane();
+    if (DOCS.length) {
+      const pick = currentDocName && DOCS.find(d => d.name === currentDocName) ? currentDocName : DOCS[0].name;
+      renderDoc(pick);
+    } else {
+      detail.innerHTML = `<div class="markdown-body"><p style="color:var(--muted)">${SERVER
+        ? "No <code>.md</code> files in the <code>docs/</code> folder yet — drop some in and reload."
+        : "Docs load via the local server. Run <code>python3 server.py</code> and open <code>http://127.0.0.1:8000/</code>."}</p></div>`;
+    }
+  });
+}
+
+/* clicking a doc in the sidebar opens it in the main pane */
+function selectDoc(name) {
+  if (!DOCS.find(d => d.name === name)) return;
+  setNavSection("docs");
+  showDocsPane();
+  renderDoc(name);
+}
+
+/* open a doc from a search hit and jump to the matching line */
+async function openDocAt(name, lineNo, query) {
+  await loadDocs();
+  setNavSection("docs");
+  showDocsPane();
+  renderDoc(name);
+  requestAnimationFrame(() => scrollDocToLine(lineNo, query));
+}
+
+function scrollDocToLine(lineNo, query) {
+  const blocks = [...detail.querySelectorAll("[data-line]")];
+  if (!blocks.length) return;
+  let target = blocks.find(b => +b.getAttribute("data-line") === lineNo);
+  if (!target) {                                            // otherwise, the block that contains this line
+    blocks.forEach(b => {
+      const bl = +b.getAttribute("data-line");
+      if (bl <= lineNo && (!target || bl > +target.getAttribute("data-line"))) target = b;
+    });
+  }
+  if (!target) target = blocks[0];
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  target.classList.remove("doc-flash"); void target.offsetWidth; target.classList.add("doc-flash");
+  setTimeout(() => target.classList.remove("doc-flash"), 2000);
+  highlightMatch(target, query);
+}
+
+function highlightMatch(el, query) {
+  if (!query) return;
+  const q = query.toLowerCase();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = []; let n;
+  while (n = walker.nextNode()) nodes.push(n);
+  for (const node of nodes) {
+    const idx = node.nodeValue.toLowerCase().indexOf(q);
+    if (idx === -1) continue;
+    const after = node.splitText(idx);
+    after.splitText(query.length);
+    const mark = document.createElement("mark");
+    mark.className = "doc-hit";
+    mark.textContent = after.nodeValue;
+    after.parentNode.replaceChild(mark, after);
+    setTimeout(() => {
+      if (mark.parentNode) mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark);
+    }, 4000);
+    break;
+  }
+}
+
+/* ---- Init ---- */
+async function boot() {
+  [customTerms, qaItems, topicItems] = await Promise.all([loadCustomTerms(), loadQA(), loadTopics()]);
+  // ensure built-in terms live in the store; seed any that are missing
+  const seed = builtinSeed();
+  const missing = Object.keys(seed).filter(id => !customTerms[id]);
+  if (missing.length) {
+    missing.forEach(id => { customTerms[id] = seed[id]; });
+    if (SERVER) {
+      for (const id of missing) {
+        try { await fetch("/terms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seed[id]) }); } catch (e) {}
+      }
+    } else {
+      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(serializeMap(customTerms))); } catch (e) {}
+    }
+  }
+  rebuildData();
+  rebuildQAData();
+  rebuildTopicData();
+  initFolder();
+  // restore sidebar open/closed + tree/flat view
+  if (loadPref("agentai-nav-open", "1") === "0") layout.classList.add("nav-closed");
+  const savedView = loadPref("agentai-nav-view", "tree");
+  btnTree.classList.toggle("active", savedView === "tree");
+  btnFlat.classList.toggle("active", savedView !== "tree");
+  renderSidebar(savedView);
+  const initial = location.hash.slice(1);
+  if (initial.startsWith("doc/")) {               // deep link to a doc: #doc/<filename>
+    const nm = decodeURIComponent(initial.slice(4));
+    await loadDocs();
+    if (DOCS.find(d => d.name === nm)) selectDoc(nm);
+    else select(GROUPS[0].terms[0].id);
+  } else if (initial.startsWith("topic/") && TOPIC_INDEX[initial.slice(6)]) {
+    selectTopic(initial.slice(6));                // #topic/<id>
+    loadDocs();
+  } else if (initial.startsWith("qa/") && QA_INDEX[initial.slice(3)]) {
+    selectQA(initial.slice(3));                   // #qa/<id>
+    loadDocs();
+  } else {
+    select(TERMS[initial] ? initial : GROUPS[0].terms[0].id);
+    loadDocs();                                   // warm the docs cache so Search covers them immediately
+  }
+}
+boot();
+
+/* ===== Universal code highlighter — python | js | ts | java | xml | pseudo =====
+   Collision-proof: everything lives in this IIFE, so it never clashes with an
+   app's own highlightCode/LANG_KW. It highlights every read-only <pre><code>
+   (skipping contenteditable editors) and re-highlights on each detail render. */
+const HLMOD = (function () {
+  const KW = {
+    java: new Set(("abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while var yield record sealed permits when true false null").split(" ")),
+    python: new Set(("and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case self cls True False None print len range str int float dict list set tuple bool").split(" ")),
+    ts: new Set(("break case catch class const continue debugger default delete do else enum export extends finally for function if import in instanceof new return super switch this throw try typeof var void while with yield let static async await of abstract as asserts declare implements infer interface is keyof namespace never override private protected public readonly require satisfies type unique unknown any accessor out using boolean number string symbol object bigint undefined null true false console").split(" ")),
+    pseudo: new Set(("if then else elif endif fi for foreach while do done repeat until loop return function procedure proc def end begin let set print output input read write and or not true false null nil to step in of break continue call").split(" ")),
+  };
+  const RE = {
+    java: /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("""[\s\S]*?"""|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(@[A-Za-z_$][\w$]*)|(\b\d[\d_]*\.?[\d_]*[fFdDlL]?\b)|([A-Za-z_$][\w$]*)/g,
+    python: /(#[^\n]*)|([rbfuRBFU]{0,2}(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))|(@[A-Za-z_][\w.]*)|(\b\d[\d_]*\.?[\d_]*\b)|([A-Za-z_]\w*)/g,
+    ts: /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|(`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(@[A-Za-z_$][\w$]*)|(\b\d[\d_]*\.?[\d_]*n?\b)|([A-Za-z_$][\w$]*)/g,
+    pseudo: /(#[^\n]*|\/\/[^\n]*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|($.^)|(\b\d[\d_]*\.?[\d_]*\b)|([A-Za-z_]\w*)/g,
+  };
+  const ALIAS = { js: "ts", javascript: "ts", typescript: "ts", py: "python", python3: "python", html: "xml", xhtml: "xml", plaintext: "pseudo", text: "pseudo", pseudocode: "pseudo" };
+  const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+  function normLang(lang) {
+    lang = (lang || "").toLowerCase();
+    lang = ALIAS[lang] || lang;
+    return (KW[lang] || lang === "xml") ? lang : null;
+  }
+
+  function highlightWords(src, L) {
+    const kw = KW[L], re = RE[L];
+    re.lastIndex = 0;
+    let out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      last = re.lastIndex;
+      if (m[1]) out += `<span class="tok-com">${esc(m[1])}</span>`;
+      else if (m[2]) out += `<span class="tok-str">${esc(m[2])}</span>`;
+      else if (m[3]) out += `<span class="tok-ann">${esc(m[3])}</span>`;
+      else if (m[4]) out += `<span class="tok-num">${esc(m[4])}</span>`;
+      else {
+        const w = m[5];
+        if (kw.has(w)) out += `<span class="tok-kw">${esc(w)}</span>`;
+        else if (/^[A-Z]/.test(w)) out += `<span class="tok-cls">${esc(w)}</span>`;
+        else out += esc(w);
+      }
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  function highlightXml(src) {
+    const re = /(<!--[\s\S]*?-->)|(<[?!]?\/?)([\w:.-]+)((?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'))?)*)(\s*\/?[?]?>)/g;
+    let out = "", last = 0, m;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      last = re.lastIndex;
+      if (m[1]) { out += `<span class="tok-com">${esc(m[1])}</span>`; continue; }
+      let s = `<span class="tok-kw">${esc(m[2])}${esc(m[3])}</span>`;
+      s += (m[4] || "").replace(/([\w:.-]+)(\s*=\s*)?("[^"]*"|'[^']*')?/g, (mm, name, eq, val) =>
+        !name ? mm :
+          `<span class="tok-cls">${esc(name)}</span>` + (eq || "") + (val ? `<span class="tok-str">${esc(val)}</span>` : ""));
+      s += `<span class="tok-kw">${esc(m[5])}</span>`;
+      out += s;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  function highlightCode(src, lang) {
+    const L = normLang(lang) || detectLang(src);
+    return L === "xml" ? highlightXml(src) : highlightWords(src, L);
+  }
+
+  function detectLang(s) {
+    const t = (s || "").trim();
+    if (/^<[!?/a-zA-Z]/.test(t) && /(<\/[a-zA-Z]|\/>|<[a-zA-Z][\w:.-]*[\s/>]|<!--|<\?xml)/.test(t)) return "xml";
+    if (/(^|\n)\s*(def |class \w|import \w|from \w+ import|print\()/.test(t) || /:\s*\n/.test(t) && /\bself\b/.test(t)) return "python";
+    if (/\b(public|private|protected)\s+(class|static|void|final)|System\.out|\bpackage\s+[\w.]+;|void\s+main/.test(t)) return "java";
+    if (/\b(interface|type)\s+[A-Za-z]|:\s*(string|number|boolean)\b|=>|\bconst\s+\w+\s*[:=]|\bfunction\b|console\./.test(t)) return "ts";
+    if (/(^|\n)\s*#/.test(t)) return "python";
+    return "pseudo";
+  }
+
+  return { highlightCode, detectLang, normLang };
+})();
+
+(function () {
+  function hlOne(code) {
+    if (code.dataset.hlx) return;                                  // my own idempotency flag
+    if (code.closest && code.closest('[contenteditable="true"], [contenteditable=""]')) return;  // never touch live editors
+    if (!code.dataset.lang && code.children.length) return;        // leave pre-highlighted / hand-styled blocks alone
+    const lang = code.dataset.lang || HLMOD.detectLang(code.textContent);
+    code.dataset.hlx = "1";
+    code.innerHTML = HLMOD.highlightCode(code.textContent, lang);
+  }
+  function hlScan(root) { if (root && root.querySelectorAll) root.querySelectorAll("pre code").forEach(hlOne); }
+  const obs = new MutationObserver(ms => {
+    for (const mu of ms) for (const n of mu.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches && n.matches("pre code")) hlOne(n);
+      if (n.querySelectorAll) n.querySelectorAll("pre code").forEach(hlOne);
+    }
+  });
+  const roots = ["main", "drawer"].map(id => document.getElementById(id)).filter(Boolean);
+  (roots.length ? roots : [document.body]).forEach(r => obs.observe(r, { childList: true, subtree: true }));
+  hlScan(document);
+})();
+</script>
+<script type="module" src="app/boot.js"></script>
+
+</body>
+</html>

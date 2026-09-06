@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  SysDsgHub — PUBLIC REPO.  Code only.  All content lives in Google Drive.
+#
+#  Everything below is either a secret or private study content. If you are
+#  adding a file and it holds knowledge rather than logic, it belongs in Drive,
+#  not here. When in doubt: `git status` before you commit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+tools/credentials.json
+tools/.token.json
+tools/.token.json*
+.env
+.env.*
+!.env.example
+
+# ── Private content — migrated to Google Drive ───────────────────────────────
+# Per-module data stores
+*/terms.json
+*/qa.json
+*/topics.json
+*/notes.json
+*/docs.json
+
+# Per-module document + image libraries
+*/docs/
+*/images/
+
+# The legacy module apps + local file servers (superseded by module.html)
+0*/
+1*/
+interview-prep/
+_templates/
+serve_hub.py
+start.command
+hub.json
+
+# Migration bookkeeping (maps local files -> Drive IDs; reveals content names)
+tools/.migration-state.json
+tools/out/
+
+# ── Housekeeping ─────────────────────────────────────────────────────────────
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+package-lock.json
+.claude/settings.local.json
