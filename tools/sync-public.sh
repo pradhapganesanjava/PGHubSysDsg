@@ -3,11 +3,14 @@
 #
 # Two checkouts exist on purpose:
 #
-#   SysdsgHubHost      private archive. Holds the original content, and is the
-#                      only place the migration tools can run, since they read
-#                      hub.json and the per-module folders from disk.
-#   SysDsgHubPublic    what gets published. Code only, its own git history, so
-#                      no object from the private repo can ever be reachable.
+#   ~/SysdsgHubHost    private archive (repo: SysDsgHub). Holds the original
+#                      content, and is the only place the migration tools can
+#                      run, since they read hub.json and the per-module folders
+#                      from disk.
+#   ~/SysDsgHubPublic  what gets published (repo: PGSysdsgHub, served at
+#                      pradhapganesanjava.github.io/PGSysdsgHub/). Code only,
+#                      with its own git history, so no object from the private
+#                      repo can ever be reachable from it.
 #
 # Files are enumerated explicitly rather than copied-then-pruned, so nothing
 # private can arrive by accident. Run the safety check afterwards regardless.
