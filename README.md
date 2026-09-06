@@ -72,16 +72,29 @@ identity from `hub.json` at runtime.
 | Checkout | Visibility | Holds |
 |---|---|---|
 | `SysDsgHubPublic` | public | this code — the published site |
-| `SysdsgHubHost` | private | the original content, kept as an archive |
+| `SysdsgHubHost` | private | the migration history; its working tree is now empty of content |
 
 They have separate git histories on purpose: the private repo's history contains
 the content, and GitHub can keep unreachable objects retrievable by commit SHA
 long after a force-push, so rewriting it would not have been airtight.
 
 Day-to-day the content is edited in the app and saved to Drive, and code is
-edited here. The migration tools are the exception — they read `hub.json` and
-the per-module folders off disk, so they only run in the private checkout.
-`tools/sync-public.sh` copies code from there to here.
+edited here. `tools/sync-public.sh` copies code from the private checkout to
+this one.
+
+### The migration tools need a content checkout
+
+`migrate.mjs`, `verify.mjs`, `preflight-delete.mjs` and `build-docs-index.py`
+all read `hub.json` and the per-module folders off disk. Those files were
+deleted from the private checkout once everything was in Drive, so the tools
+have nothing to read until the content is restored:
+
+```bash
+cd ~/SysdsgHubHost
+git checkout 332dd90 -- .        # the commit before the content was removed
+```
+
+Drive is the live copy; that commit is the cold one.
 
 ---
 
@@ -100,15 +113,22 @@ origin makes Google reject sign-in with `origin_mismatch`; add the origin under
 
 ## Migrating content into Drive
 
-Only needed once, or when adding content from outside the app. Requires
-`tools/credentials.json` (a Desktop OAuth client from the same Cloud project as
-the web client) — both are gitignored.
+Already done — this is here for the record, and for a re-run against restored
+content (see above). Requires `tools/credentials.json`, a Desktop OAuth client
+from the same Cloud project as the web client; it and the token it mints are
+gitignored.
 
 ```bash
 python3 tools/build-docs-index.py     # bake the /docs and hub payloads
 node    tools/migrate.mjs --dry-run   # report, write nothing
 node    tools/migrate.mjs             # upload
+node    tools/verify.mjs --write      # read it all back and check it
 ```
+
+`preflight-delete.mjs` is the one to run before deleting any local copy: it
+walks every file individually and refuses unless each one has a Drive id that
+still resolves. It is what caught two pasted note images that a count-based
+check had passed.
 
 The migration is idempotent and resumable: it keys everything on
 (parent folder, name), skips files whose checksum already matches, retries

@@ -28,7 +28,7 @@ cp "$SRC"/vendor/mermaid.min.js                         "$DEST/vendor/"
 cp "$SRC"/tools/*.mjs "$SRC"/tools/*.py "$SRC"/tools/*.sh \
    "$SRC"/tools/package.json                            "$DEST/tools/"
 cp "$SRC"/tools/lib/*.mjs                               "$DEST/tools/lib/"
-cp "$SRC"/tools/test/run.mjs                            "$DEST/tools/test/"
+cp "$SRC"/tools/test/*.mjs                              "$DEST/tools/test/"
 cp "$SRC"/.github/workflows/deploy.yml                  "$DEST/.github/workflows/"
 
 echo "  synced $SRC -> $DEST"
