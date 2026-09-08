@@ -665,6 +665,15 @@
   .diagram svg { display:block; max-width:100%; height:auto; color:var(--text); }
   .diagram-cap { color:var(--text); font-size:.9rem; line-height:1.5; margin:0 0 14px; }
   .diagram-cap strong { color:var(--text); }
+  .boxflow { display:flex; flex-wrap:wrap; align-items:stretch; gap:0; margin:12px 0; }
+  .boxflow > .pan { flex:1 1 110px; min-width:100px; margin:4px 0; }
+  .boxflow > .pan h4 { margin:0 0 2px; }
+  .boxflow > .pan p { margin:0; font-size:.78rem; color:var(--muted); }
+  .boxflow > .arr { display:flex; align-items:center; justify-content:center; color:var(--muted);
+    font-size:1.15rem; font-weight:700; padding:0 7px; flex:0 0 auto; align-self:center; }
+  .boxflow.stack { flex-direction:column; }
+  .boxflow.stack > .pan { flex:1 1 auto; min-width:0; }
+  .boxflow.stack > .arr { padding:2px 0; font-size:.95rem; }
   .pan.go, .note.go, .callout.go { border-left:3px solid #3d9a6a; }
   .pan.warn, .note.warn, .callout.warn { border-left:3px solid #e0803a; }
   .pan.trap, .note.trap, .callout.trap { border-left:3px solid #e05a5a; }
@@ -2505,7 +2514,10 @@ const RICH_READABLE_SEED =
   '<div class="pan warn"><h4>Trade-off</h4><ul class="tight"><li></li></ul></div>' +
   '<div class="pan trap"><h4>Trap</h4><ul class="tight"><li></li></ul></div>' +
   '</div>' +
-  '<pre class="flow">producer  →  bounded queue  →  consumer</pre>';
+  '<div class="boxflow">' +
+  '<div class="pan"><h4>producer</h4></div><span class="arr">→</span>' +
+  '<div class="pan go"><h4>bounded queue</h4></div><span class="arr">→</span>' +
+  '<div class="pan"><h4>consumer</h4></div></div>';
 let editingTopicId = null;
 
 function openTopicModal(id) {

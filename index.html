@@ -309,6 +309,15 @@
   .modal-body .tight li { margin:1px 0; }
   .modal-body .tldr { background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin:0 0 12px; }
   .modal-body .flow { white-space:pre;font-family:ui-monospace,Menlo,monospace;font-size:.8rem;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto; }
+  .modal-body .boxflow { display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:12px 0; }
+  .modal-body .boxflow > .pan { flex:1 1 110px;min-width:100px;margin:4px 0; }
+  .modal-body .boxflow > .pan h4 { margin:0 0 2px; }
+  .modal-body .boxflow > .pan p { margin:0;font-size:.78rem;color:var(--muted); }
+  .modal-body .boxflow > .arr { display:flex;align-items:center;justify-content:center;color:var(--muted);
+    font-size:1.15rem;font-weight:700;padding:0 7px;flex:0 0 auto;align-self:center; }
+  .modal-body .boxflow.stack { flex-direction:column; }
+  .modal-body .boxflow.stack > .pan { flex:1 1 auto;min-width:0; }
+  .modal-body .boxflow.stack > .arr { padding:2px 0;font-size:.95rem; }
   .modal-body .pan.go, .modal-body .note.go, .modal-body .callout.go { border-left:3px solid #3d9a6a; }
   .modal-body .pan.warn, .modal-body .note.warn, .modal-body .callout.warn { border-left:3px solid #e0803a; }
   .modal-body .pan.trap, .modal-body .note.trap, .modal-body .callout.trap { border-left:3px solid #e05a5a; }

@@ -16,7 +16,7 @@ Do **not** wrap content in `.rich-readable`. Do **not** use mermaid — it reads
 3. **Split prose** — long paragraphs become `.tight` bullets
 4. **Highlight** — `<b>`, `<code>`, `<span class="tag">` on terms that must pop
 5. **Boxes** — `.scale` > `.pan` for comparisons; `.note` for a trap; `.callout` / `.callout.tradeoff` for a scored line
-6. **Flow** — `<pre class="flow">` box-drawing / ASCII (same as the rest of the hub). Caption with `.diagram-cap` if needed
+6. **Flow** — `.boxflow` of `.pan.go` / `.pan.warn` / `.pan.trap` with `<span class="arr">→</span>` (or `.boxflow.stack` + `↓`). Not mermaid. Not ASCII art.
 7. **See also** — `<a class="chip" href="#id">` or `#topic/id` / `#qa/id`
 
 ## Color roles (existing classes)
@@ -28,12 +28,13 @@ Do **not** wrap content in `.rich-readable`. Do **not** use mermaid — it reads
 ```html
 <div class="chips"><span class="chip">keyword</span></div>
 <div class="tldr"><b>In one line:</b> the claim.</div>
-<div class="scale">
-  <div class="pan go"><h4>Keep</h4><ul class="tight"><li>…</li></ul></div>
-  <div class="pan warn"><h4>Trade-off</h4></div>
-  <div class="pan trap"><h4>Trap</h4></div>
+<div class="boxflow">
+  <div class="pan"><h4>in</h4></div>
+  <span class="arr">→</span>
+  <div class="pan go"><h4>keep</h4></div>
+  <span class="arr">→</span>
+  <div class="pan trap"><h4>don't</h4></div>
 </div>
-<pre class="flow">producer  →  bounded queue  →  consumer</pre>
 ```
 
-Walls of prose and mermaid flowcharts are out of spec.
+Walls of prose, mermaid, and ASCII flowcharts are out of spec.
