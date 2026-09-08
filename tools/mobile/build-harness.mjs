@@ -26,12 +26,12 @@ const LONG_QA = 'Metrics store for 100K machines — write-heavy, fast aggregate
   'Walk through ingestion, storage layout, rollups, and the query path.'
 
 const mods = ['01-foundations','02-patterns','03-microservices','04-distributed','05-backend',
-              '06-tradeoffs','07-technologies','08-designs','09-networking','10-lld',
+              '06-tradeoffs','07-technologies','13-databases','08-designs','09-networking','10-lld',
               '11-concurrency','12-security','interview-prep']
 const titles = ['Foundations','Patterns','Microservices','Distributed Systems','Backend Engineering',
-                'Trade-offs','Technologies','Real-World Designs','Networking','Low-Level Design',
+                'Trade-offs','Technologies','Databases','Real-World Designs','Networking','Low-Level Design',
                 'Concurrency','Security','Interview Prep']
-const emoji = ['🧱','🧩','🔷','🌐','⚙️','⚖️','🛠️','🏗️','📡','📐','🧵','🔐','🎤']
+const emoji = ['🧱','🧩','🔷','🌐','⚙️','⚖️','🛠️','🗄️','🏗️','📡','📐','🧵','🔐','🎤']
 
 const hub = {
   title: 'System Design Hub',
@@ -40,7 +40,7 @@ const hub = {
     { name: 'Fundamentals', blurb: "The bedrock — core concepts, networking, and the 'it depends' decisions.", modules: ['01-foundations','09-networking','06-tradeoffs'] },
     { name: 'Architecture & Patterns', blurb: 'Reusable structures — design patterns, microservices, distributed systems.', modules: ['02-patterns','03-microservices','04-distributed'] },
     { name: 'Low-Level Design', blurb: 'Object-oriented design — the code-level counterpart to system design.', modules: ['10-lld'] },
-    { name: 'Engineering', blurb: 'The build layer — backend internals, the concrete tech toolkit, and securing it all.', modules: ['05-backend','07-technologies','11-concurrency','12-security'] },
+    { name: 'Engineering', blurb: 'The build layer — backend internals, the concrete tech toolkit, and securing it all.', modules: ['05-backend','07-technologies','13-databases','11-concurrency','12-security'] },
     { name: 'Practice', blurb: 'Put it together — full worked interview walkthroughs, and the interview round itself.', modules: ['08-designs','interview-prep'] },
   ],
   modules: Object.fromEntries(mods.map((d, i) => [d, {
