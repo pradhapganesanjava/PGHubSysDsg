@@ -542,6 +542,21 @@ const TYPE_LABEL = { terms:"Terms", qa:"Q&amp;A", topics:"Topics" };
 const TYPE_ONE   = { terms:"Term", qa:"Q&A", topics:"Topic" };
 let INDEX = { modules: [] };
 
+const alpha = (a, b, key) =>
+  String(a[key] || "").localeCompare(String(b[key] || ""), undefined, { sensitivity: "base" });
+
+/** Contents tree / browse: modules by title, items by label. */
+function contentsModules(){
+  return INDEX.modules.slice()
+    .sort((a, b) => alpha(a, b, "title"))
+    .map(m => ({
+      ...m,
+      terms:  (m.terms  || []).slice().sort((a, b) => alpha(a, b, "label")),
+      qa:     (m.qa     || []).slice().sort((a, b) => alpha(a, b, "label")),
+      topics: (m.topics || []).slice().sort((a, b) => alpha(a, b, "label")),
+    }));
+}
+
 /* ---- fetch the on-disk content index once ---- */
 async function loadIndex(){
   try { INDEX = await (await fetch("/__index__.json", {cache:"no-store"})).json(); }
@@ -584,7 +599,8 @@ function buildTree(){
   const meta = document.getElementById("treeMeta");
   if (!INDEX.modules.length){ meta.textContent = "sign in to load contents"; tree.innerHTML=""; return; }
   let totT=0, totQ=0, totP=0;
-  INDEX.modules.forEach(m => { totT += m.terms.length; totQ += m.qa.length; totP += m.topics.length; });
+  const mods = contentsModules();
+  mods.forEach(m => { totT += m.terms.length; totQ += m.qa.length; totP += m.topics.length; });
   meta.textContent = `${INDEX.modules.length} modules · ${totT} terms · ${totQ} Q&A · ${totP} topics`;
   meta.dataset.base = meta.textContent;
 
@@ -595,18 +611,19 @@ function buildTree(){
 
   if (treeMode === "flat"){
     const rows = [];
-    INDEX.modules.forEach(m => {
+    mods.forEach(m => {
       ["terms","qa","topics"].forEach(type => {
-        m[type].forEach(it => rows.push(itemLinkFlat(m, type, it)));
+        m[type].forEach(it => rows.push({ m, type, it }));
       });
     });
+    rows.sort((a, b) => alpha(a.it, b.it, "label") || alpha(a.m, b.m, "title"));
     tree.innerHTML = rows.length
-      ? `<div class="items flat-list">${rows.join("")}</div>`
+      ? `<div class="items flat-list">${rows.map(r => itemLinkFlat(r.m, r.type, r.it)).join("")}</div>`
       : `<p class="sb-meta">No items yet.</p>`;
     return;
   }
 
-  tree.innerHTML = INDEX.modules.map(m => {
+  tree.innerHTML = mods.map(m => {
     const total = m.terms.length + m.qa.length + m.topics.length;
     const groups = ["terms","qa","topics"].map(type => {
       const items = m[type]; if (!items.length) return "";
@@ -659,7 +676,7 @@ function toggleExpandAll(){
 function buildBrowse(){
   const el = document.getElementById("browse");
   if (!INDEX.modules.length){ el.innerHTML = '<p class="no-results">Sign in to load contents.</p>'; return; }
-  el.innerHTML = INDEX.modules.map(m => {
+  el.innerHTML = contentsModules().map(m => {
     const total = m.terms.length + m.qa.length + m.topics.length;
     const types = ["terms","qa","topics"].map(type => {
       const items = m[type]; if (!items.length) return "";

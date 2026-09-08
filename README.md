@@ -1,7 +1,7 @@
 # System Design Hub
 
 A study hub for system design — terms, Q&A, topics, worked designs and a document
-library across thirteen modules.
+library across fourteen modules.
 
 **This repository contains only the application.** Every piece of content — every
 term, answer, note, document and image — lives in a private Google Drive folder
@@ -55,7 +55,7 @@ Two consequences worth knowing:
 | Path | What it is |
 |---|---|
 | `index.html` | Landing page — module cards, cross-module tree, search, practice |
-| `module.html` | The module app. One page for all thirteen; `?m=01-foundations` selects |
+| `module.html` | The module app. One page for all fourteen; `?m=01-foundations` selects |
 | `app/` | The Drive layer: auth, Drive REST, the fetch store, media, sign-in gate |
 | `vendor/` | Third-party libraries (mermaid) |
 | `tools/` | Migration and maintenance. Never deployed |
@@ -192,7 +192,7 @@ read on load so they render, and their title comes from the first `# heading`.
 
 ## Shared preferences
 
-The theme is chosen once and holds everywhere — the hub, all thirteen modules,
+The theme is chosen once and holds everywhere — the hub, all fourteen modules,
 other open tabs, and other machines.
 
 The control is one dot showing the theme in use, with a caret; the rest appear

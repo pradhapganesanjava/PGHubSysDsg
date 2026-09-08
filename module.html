@@ -956,6 +956,13 @@ let customTerms = {};   // id -> custom term (loaded from server or localStorage
 const TAG_SEP = "::";
 function tagParts(group) { return (group || "").split(TAG_SEP).map(s => s.trim()).filter(Boolean); }
 function tagLeaf(group) { const p = tagParts(group); return p[p.length - 1] || group; }
+function alphaTitle(a, b) {
+  return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" });
+}
+function sortNavGroups(groups) {
+  groups.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
+  groups.forEach(g => g.terms.sort(alphaTitle));
+}
 
 function rebuildData() {
   GROUPS = []; TERMS = {};
@@ -967,6 +974,7 @@ function rebuildData() {
     g.terms.push(t);
   });
   GROUPS.forEach(g => g.terms.forEach(t => { t._group = g; TERMS[t.id] = t; }));
+  sortNavGroups(GROUPS);
 }
 
 /* drop runtime-only props (_group back-ref, _custom) before persisting */
@@ -1127,7 +1135,7 @@ function renderSidebar(mode) {
   }
 
   if (mode === "flat") {
-    const all = Object.values(navIndex()).slice().sort((a, b) => a.title.localeCompare(b.title));
+    const all = Object.values(navIndex()).slice().sort(alphaTitle);
     const group = document.createElement("div");
     group.className = "group";
     const items = document.createElement("div");
@@ -1166,6 +1174,11 @@ function buildTree(groups) {
     });
     node.terms.push(...g.terms);
   });
+  (function sortNode(n) {
+    n.order.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    n.terms.sort(alphaTitle);
+    n.order.forEach(k => sortNode(n.children[k]));
+  })(root);
   return root;
 }
 function countTree(node) {
@@ -1213,6 +1226,9 @@ function renderTreeNode(node, container, depth, opts) {
 /* ---- Docs sidebar: untagged first (flat), then the content-tag tree ---- */
 const UNTAGGED = "Untagged";
 function docTagOf(d) { return ((d && d.tag) || "").trim() || UNTAGGED; }
+function docTitleCmp(a, b) {
+  return String(a.title || a.name || "").localeCompare(String(b.title || b.name || ""), undefined, { sensitivity: "base" });
+}
 function knownDocTags() {
   return [...new Set(DOCS.map(docTagOf).filter(t => t !== UNTAGGED))].sort((a, b) => a.localeCompare(b));
 }
@@ -1241,8 +1257,8 @@ function renderDocsNav(mode) {
     nav.appendChild(group);
     return;
   }
-  const untagged = DOCS.filter(d => docTagOf(d) === UNTAGGED);
-  const tagged = DOCS.filter(d => docTagOf(d) !== UNTAGGED);
+  const untagged = DOCS.filter(d => docTagOf(d) === UNTAGGED).sort(docTitleCmp);
+  const tagged = DOCS.filter(d => docTagOf(d) !== UNTAGGED).sort(docTitleCmp);
 
   // Untagged docs always sit at the very top as a plain flat list — they are the
   // work queue: open one, give it a tag, and it moves down into the tree.
@@ -2285,6 +2301,7 @@ function rebuildQAData() {
     QA_INDEX[q.id] = q;
   });
   QA_GROUPS.forEach(g => g.terms.forEach(q => (q._group = g)));
+  sortNavGroups(QA_GROUPS);
 }
 async function loadQA() {
   if (SERVER) {
@@ -2428,6 +2445,7 @@ function rebuildTopicData() {
     TOPIC_INDEX[t.id] = t;
   });
   TOPIC_GROUPS.forEach(g => g.terms.forEach(t => (t._group = g)));
+  sortNavGroups(TOPIC_GROUPS);
 }
 async function loadTopics() {
   if (SERVER) {
@@ -3139,8 +3157,8 @@ function renderDocsIndex() {
 
   // Untagged first and flat — same order the sidebar uses, for the same reason:
   // they are the ones still waiting to be filed.
-  const untagged = DOCS.filter(d => docTagOf(d) === UNTAGGED);
-  const tagged   = DOCS.filter(d => docTagOf(d) !== UNTAGGED);
+  const untagged = DOCS.filter(d => docTagOf(d) === UNTAGGED).sort(docTitleCmp);
+  const tagged   = DOCS.filter(d => docTagOf(d) !== UNTAGGED).sort(docTitleCmp);
   if (untagged.length) {
     const wrap = document.createElement("div");
     wrap.className = "ov-group";
