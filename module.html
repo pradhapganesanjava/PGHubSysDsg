@@ -665,15 +665,6 @@
   .diagram svg { display:block; max-width:100%; height:auto; color:var(--text); }
   .diagram-cap { color:var(--text); font-size:.9rem; line-height:1.5; margin:0 0 14px; }
   .diagram-cap strong { color:var(--text); }
-  .boxflow { display:flex; flex-wrap:wrap; align-items:stretch; gap:0; margin:12px 0; }
-  .boxflow > .pan { flex:1 1 110px; min-width:100px; margin:4px 0; }
-  .boxflow > .pan h4 { margin:0 0 2px; }
-  .boxflow > .pan p { margin:0; font-size:.78rem; color:var(--muted); }
-  .boxflow > .arr { display:flex; align-items:center; justify-content:center; color:var(--muted);
-    font-size:1.15rem; font-weight:700; padding:0 7px; flex:0 0 auto; align-self:center; }
-  .boxflow.stack { flex-direction:column; }
-  .boxflow.stack > .pan { flex:1 1 auto; min-width:0; }
-  .boxflow.stack > .arr { padding:2px 0; font-size:.95rem; }
   .pan.go, .note.go, .callout.go { border-left:3px solid #3d9a6a; }
   .pan.warn, .note.warn, .callout.warn { border-left:3px solid #e0803a; }
   .pan.trap, .note.trap, .callout.trap { border-left:3px solid #e05a5a; }
@@ -2514,10 +2505,17 @@ const RICH_READABLE_SEED =
   '<div class="pan warn"><h4>Trade-off</h4><ul class="tight"><li></li></ul></div>' +
   '<div class="pan trap"><h4>Trap</h4><ul class="tight"><li></li></ul></div>' +
   '</div>' +
-  '<div class="boxflow">' +
-  '<div class="pan"><h4>producer</h4></div><span class="arr">→</span>' +
-  '<div class="pan go"><h4>bounded queue</h4></div><span class="arr">→</span>' +
-  '<div class="pan"><h4>consumer</h4></div></div>';
+  '<div class="diagram">' +
+  '<svg viewBox="0 0 720 88" role="img" aria-label="producer to bounded queue to consumer" xmlns="http://www.w3.org/2000/svg">' +
+  '<style>.d-lbl{fill:var(--text);font:600 13px -apple-system,Segoe UI,Roboto,sans-serif}.d-sub{fill:var(--text);opacity:.78;font:11px -apple-system,Segoe UI,sans-serif}.d-box{fill:var(--panel-2);stroke:var(--border);stroke-width:1.5}.d-ok{fill:var(--panel-2);stroke:#2e7d32;stroke-width:2}</style>' +
+  '<defs><marker id="seed-ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--text)"/></marker></defs>' +
+  '<rect x="24" y="22" width="180" height="44" rx="7" class="d-box"/><text x="114" y="42" text-anchor="middle" class="d-lbl">producer</text><text x="114" y="56" text-anchor="middle" class="d-sub"></text>' +
+  '<line x1="204" y1="44" x2="258" y2="44" stroke="var(--text)" stroke-width="1.5" marker-end="url(#seed-ah)"/>' +
+  '<rect x="260" y="22" width="200" height="44" rx="7" class="d-ok"/><text x="360" y="42" text-anchor="middle" class="d-lbl">bounded queue</text><text x="360" y="56" text-anchor="middle" class="d-sub"></text>' +
+  '<line x1="460" y1="44" x2="514" y2="44" stroke="var(--text)" stroke-width="1.5" marker-end="url(#seed-ah)"/>' +
+  '<rect x="516" y="22" width="180" height="44" rx="7" class="d-box"/><text x="606" y="42" text-anchor="middle" class="d-lbl">consumer</text><text x="606" y="56" text-anchor="middle" class="d-sub"></text>' +
+  '</svg></div>' +
+  '<p class="diagram-cap"></p>';
 let editingTopicId = null;
 
 function openTopicModal(id) {

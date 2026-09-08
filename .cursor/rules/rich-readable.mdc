@@ -7,7 +7,7 @@ alwaysApply: true
 
 An **instruction**, not a CSS class or a page badge. Write study HTML so it is scan-first: a reader should catch key words and the decision in a few seconds.
 
-Do **not** wrap content in `.rich-readable`. Do **not** use mermaid — it reads as a sketch, not a study page. Use the helpers already in the app.
+Do **not** wrap content in `.rich-readable`. Do **not** use mermaid. Do **not** use ASCII art or `.boxflow`. Use the helpers already in the app.
 
 ## Build order
 
@@ -16,25 +16,47 @@ Do **not** wrap content in `.rich-readable`. Do **not** use mermaid — it reads
 3. **Split prose** — long paragraphs become `.tight` bullets
 4. **Highlight** — `<b>`, `<code>`, `<span class="tag">` on terms that must pop
 5. **Boxes** — `.scale` > `.pan` for comparisons; `.note` for a trap; `.callout` / `.callout.tradeoff` for a scored line
-6. **Flow** — `.boxflow` of `.pan.go` / `.pan.warn` / `.pan.trap` with `<span class="arr">→</span>` (or `.boxflow.stack` + `↓`). Not mermaid. Not ASCII art.
+6. **Diagrams** — inline SVG in `.diagram` + `.diagram-cap`, copied from the **Backpressure** term. Not mermaid. Not ASCII. Not `.boxflow`.
 7. **See also** — `<a class="chip" href="#id">` or `#topic/id` / `#qa/id`
 
 ## Color roles (existing classes)
 
-- `.go` — keep / do this
-- `.warn` — trade-off
-- `.trap` — don’t
+- `.go` / SVG `.d-ok` — keep / do this (green `#2e7d32`)
+- `.warn` / SVG `.d-accent` — trade-off / signal
+- `.trap` / SVG `.d-warn` — don’t (red `#c62828`)
+
+## Diagrams (canonical: term Backpressure)
+
+Every flow, pipeline, fork, or with-vs-without picture is an inline SVG:
+
+- Wrap in `<div class="diagram">`. Caption in `<p class="diagram-cap">`.
+- `viewBox="0 0 720 …"` so it scales. `role="img"` + `aria-label`.
+- Theme with CSS variables: `var(--text)`, `var(--panel-2)`, `var(--border)`, `var(--accent)`, `var(--accent-soft)`.
+- Boxes: `<rect rx="7">` + `.d-lbl` / `.d-sub`. Arrows: `<line>` + a **unique** `<marker id="…-ah">` per diagram (IDs must not collide on the page).
+- Row label: `.d-step`. Feedback arc: dashed `var(--accent)` + `.d-fb`. Failure note: `.d-bad`.
+- Two-row compare (WITH vs WITHOUT) and a top box forking into options are the usual shapes — see Backpressure “Data path” and “Control flow”.
 
 ```html
-<div class="chips"><span class="chip">keyword</span></div>
-<div class="tldr"><b>In one line:</b> the claim.</div>
-<div class="boxflow">
-  <div class="pan"><h4>in</h4></div>
-  <span class="arr">→</span>
-  <div class="pan go"><h4>keep</h4></div>
-  <span class="arr">→</span>
-  <div class="pan trap"><h4>don't</h4></div>
+<div class="diagram">
+  <svg viewBox="0 0 720 120" role="img" aria-label="producer to bounded queue" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .d-lbl{fill:var(--text);font:600 13px -apple-system,Segoe UI,Roboto,sans-serif}
+      .d-sub{fill:var(--text);opacity:.78;font:11px -apple-system,Segoe UI,sans-serif}
+      .d-box{fill:var(--panel-2);stroke:var(--border);stroke-width:1.5}
+      .d-ok{fill:var(--panel-2);stroke:#2e7d32;stroke-width:2}
+      .d-warn{fill:var(--panel-2);stroke:#c62828;stroke-width:2}
+    </style>
+    <defs>
+      <marker id="ex-ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--text)"/></marker>
+    </defs>
+    <rect x="24" y="24" width="160" height="44" rx="7" class="d-box"/>
+    <text x="104" y="50" text-anchor="middle" class="d-lbl">producer</text>
+    <line x1="184" y1="46" x2="238" y2="46" stroke="var(--text)" stroke-width="1.5" marker-end="url(#ex-ah)"/>
+    <rect x="240" y="24" width="160" height="44" rx="7" class="d-ok"/>
+    <text x="320" y="50" text-anchor="middle" class="d-lbl">bounded Q</text>
+  </svg>
 </div>
+<p class="diagram-cap"><strong>Bound the queue</strong> so fullness becomes a signal.</p>
 ```
 
-Walls of prose, mermaid, and ASCII flowcharts are out of spec.
+Walls of prose, mermaid, ASCII flowcharts, and `.boxflow` are out of spec.
