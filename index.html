@@ -383,10 +383,10 @@
     <div class="sb-tools">
       <input id="treeSearch" type="search" placeholder="Search all modules…" autocomplete="off">
       <div class="view-toggle" role="group" aria-label="Contents layout">
-        <button type="button" id="btn-tree" class="active" title="Hierarchy view" aria-label="Hierarchy view">
+        <button type="button" id="btn-tree" title="Hierarchy view" aria-label="Hierarchy view">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="6" height="2" rx="1"/><rect x="6" y="7" width="9" height="2" rx="1"/><rect x="6" y="11.5" width="9" height="2" rx="1"/></svg>
         </button>
-        <button type="button" id="btn-flat" title="Flat list" aria-label="Flat list">
+        <button type="button" id="btn-flat" class="active" title="Flat list" aria-label="Flat list">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="11.5" width="14" height="2" rx="1"/></svg>
         </button>
       </div>
@@ -542,18 +542,20 @@ const TYPE_LABEL = { terms:"Terms", qa:"Q&amp;A", topics:"Topics" };
 const TYPE_ONE   = { terms:"Term", qa:"Q&A", topics:"Topic" };
 let INDEX = { modules: [] };
 
+const ALPHA = { sensitivity: "base", numeric: true };
 const alpha = (a, b, key) =>
-  String(a[key] || "").localeCompare(String(b[key] || ""), undefined, { sensitivity: "base" });
+  String(a[key] || "").localeCompare(String(b[key] || ""), undefined, ALPHA);
+const itemLabel = it => String(it?.label || it?.title || it?.name || it?.question || "");
 
-/** Contents tree / browse: modules by title, items by label. */
+/** Contents tree / browse: modules by title, items by displayed name. */
 function contentsModules(){
   return INDEX.modules.slice()
     .sort((a, b) => alpha(a, b, "title"))
     .map(m => ({
       ...m,
-      terms:  (m.terms  || []).slice().sort((a, b) => alpha(a, b, "label")),
-      qa:     (m.qa     || []).slice().sort((a, b) => alpha(a, b, "label")),
-      topics: (m.topics || []).slice().sort((a, b) => alpha(a, b, "label")),
+      terms:  (m.terms  || []).slice().sort((a, b) => itemLabel(a).localeCompare(itemLabel(b), undefined, ALPHA)),
+      qa:     (m.qa     || []).slice().sort((a, b) => itemLabel(a).localeCompare(itemLabel(b), undefined, ALPHA)),
+      topics: (m.topics || []).slice().sort((a, b) => itemLabel(a).localeCompare(itemLabel(b), undefined, ALPHA)),
     }));
 }
 
@@ -566,7 +568,7 @@ async function loadIndex(){
 /* ---- left tree ---- */
 const savePref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const loadPref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
-let treeMode = loadPref("sysdsg-hub-nav-view", "tree"); // "tree" | "flat"
+let treeMode = loadPref("sysdsg-hub-nav-view-2", "flat"); // "tree" | "flat"
 
 function itemLink(m, type, it){
   const label = esc(it.label);
@@ -616,7 +618,7 @@ function buildTree(){
         m[type].forEach(it => rows.push({ m, type, it }));
       });
     });
-    rows.sort((a, b) => alpha(a.it, b.it, "label") || alpha(a.m, b.m, "title"));
+    rows.sort((a, b) => itemLabel(a.it).localeCompare(itemLabel(b.it), undefined, ALPHA) || alpha(a.m, b.m, "title"));
     tree.innerHTML = rows.length
       ? `<div class="items flat-list">${rows.map(r => itemLinkFlat(r.m, r.type, r.it)).join("")}</div>`
       : `<p class="sb-meta">No items yet.</p>`;
@@ -657,7 +659,7 @@ function paintModOpen(){
 
 function setTreeMode(mode){
   treeMode = mode;
-  savePref("sysdsg-hub-nav-view", mode);
+  savePref("sysdsg-hub-nav-view-2", mode);
   const q = document.getElementById("treeSearch").value;
   buildTree();
   if (q) runSearch(q, document.getElementById("tree"));

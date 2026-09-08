@@ -34,10 +34,30 @@ export async function hubManifest() {
   return _hub ??= await readRootJson('hub.json', { modules: {}, categories: [] })
 }
 
+const ALPHA = { sensitivity: 'base', numeric: true }
+
+function itemLabel(it) {
+  return String(it?.label || it?.title || it?.name || it?.question || '')
+}
+
+/** Contents sidebar is A–Z by displayed name, even when Drive's baked index is not. */
+function sortHubIndex(index) {
+  const byTitle = (a, b) => String(a.title || '').localeCompare(String(b.title || ''), undefined, ALPHA)
+  const byItem  = (a, b) => itemLabel(a).localeCompare(itemLabel(b), undefined, ALPHA)
+    || String(a.group || '').localeCompare(String(b.group || ''), undefined, ALPHA)
+  const modules = (index?.modules ?? []).slice().sort(byTitle).map(m => ({
+    ...m,
+    terms:  (m.terms  || []).slice().sort(byItem),
+    qa:     (m.qa     || []).slice().sort(byItem),
+    topics: (m.topics || []).slice().sort(byItem),
+  }))
+  return { ...index, modules }
+}
+
 async function hubIndex() {
   if (_index) return _index
-  _index = await readRootJson('hub-index.json', null)
-  if (_index) return _index
+  const baked = await readRootJson('hub-index.json', null)
+  if (baked) return _index = sortHubIndex(baked)
   // No baked index (migration not re-run): assemble one from the module files.
   // Slower, but the page works rather than showing an empty tree.
   const hub = await hubManifest()
@@ -47,8 +67,6 @@ async function hubIndex() {
     const list = (obj, ...keys) => Object.entries(obj)
       .flatMap(([k, v]) => v && typeof v === 'object'
         ? [{ id: v.id ?? k, label: label(v, keys), group: v.group ?? '' }] : [])
-      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase())
-                   || a.group.toLowerCase().localeCompare(b.group.toLowerCase()))
     return {
       dir, title: m.title ?? dir, emoji: m.emoji ?? '',
       terms:  list(terms, 'title'),
@@ -56,8 +74,7 @@ async function hubIndex() {
       topics: list(topics, 'title', 'summary'),
     }
   }))
-  mods.sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
-  return _index = { modules: mods }
+  return _index = sortHubIndex({ modules: mods })
 }
 
 function label(entry, keys) {

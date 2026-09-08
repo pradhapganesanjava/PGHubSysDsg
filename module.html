@@ -726,10 +726,10 @@
         <div class="search-row">
           <input id="search" class="search" type="text" placeholder="Filter terms…" autocomplete="off" />
           <div class="view-toggle">
-            <button id="btn-tree" class="active" title="Tree view">
+            <button id="btn-tree" title="Tree view">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="6" height="2" rx="1"/><rect x="6" y="7" width="9" height="2" rx="1"/><rect x="6" y="11.5" width="9" height="2" rx="1"/></svg>
             </button>
-            <button id="btn-flat" title="Flat list">
+            <button id="btn-flat" class="active" title="Flat list">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2.5" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="11.5" width="14" height="2" rx="1"/></svg>
             </button>
           </div>
@@ -956,11 +956,15 @@ let customTerms = {};   // id -> custom term (loaded from server or localStorage
 const TAG_SEP = "::";
 function tagParts(group) { return (group || "").split(TAG_SEP).map(s => s.trim()).filter(Boolean); }
 function tagLeaf(group) { const p = tagParts(group); return p[p.length - 1] || group; }
+function navLabel(t) {
+  const raw = t && (t.title || t.question || t.name || t.label) || "";
+  return String(raw).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
 function alphaTitle(a, b) {
-  return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" });
+  return navLabel(a).localeCompare(navLabel(b), undefined, { sensitivity: "base", numeric: true });
 }
 function sortNavGroups(groups) {
-  groups.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
+  groups.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base", numeric: true }));
   groups.forEach(g => g.terms.sort(alphaTitle));
 }
 
@@ -1175,7 +1179,7 @@ function buildTree(groups) {
     node.terms.push(...g.terms);
   });
   (function sortNode(n) {
-    n.order.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    n.order.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
     n.terms.sort(alphaTitle);
     n.order.forEach(k => sortNode(n.children[k]));
   })(root);
@@ -1454,8 +1458,8 @@ const btnTree = document.getElementById("btn-tree");
 const btnFlat = document.getElementById("btn-flat");
 const savePref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const loadPref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
-btnTree.addEventListener("click", () => { btnTree.classList.add("active"); btnFlat.classList.remove("active"); savePref("agentai-nav-view", "tree"); renderSidebar("tree"); });
-btnFlat.addEventListener("click", () => { btnFlat.classList.add("active"); btnTree.classList.remove("active"); savePref("agentai-nav-view", "flat"); renderSidebar("flat"); });
+btnTree.addEventListener("click", () => { btnTree.classList.add("active"); btnFlat.classList.remove("active"); savePref("agentai-nav-view-2", "tree"); renderSidebar("tree"); });
+btnFlat.addEventListener("click", () => { btnFlat.classList.add("active"); btnTree.classList.remove("active"); savePref("agentai-nav-view-2", "flat"); renderSidebar("flat"); });
 document.getElementById("btn-collapse").addEventListener("click", () => {
   const groups = [...nav.querySelectorAll(".group")].filter(g => g.querySelector(":scope > .group-head"));
   const anyOpen = groups.some(g => !g.classList.contains("collapsed"));
@@ -3278,7 +3282,7 @@ async function boot() {
   const navPref = loadPref("agentai-nav-open", "");
   const narrow  = window.matchMedia("(max-width: 860px)").matches;
   if (navPref === "0" || (navPref === "" && narrow)) layout.classList.add("nav-closed");
-  const savedView = loadPref("agentai-nav-view", "tree");
+  const savedView = loadPref("agentai-nav-view-2", "flat");
   btnTree.classList.toggle("active", savedView === "tree");
   btnFlat.classList.toggle("active", savedView !== "tree");
   renderSidebar(savedView);
