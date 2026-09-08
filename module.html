@@ -1326,6 +1326,42 @@ function selectTopic(id) {
   document.getElementById("main").scrollTop = 0;
 }
 
+/* Hash deep-links (#term-id, #qa/<id>, #topic/<id>, #doc/<file>, #docs).
+   The app used to read location.hash only at boot, so authored <a href="#…">
+   links (See also, in-body cross-refs) changed the URL and did nothing else. */
+function routeHash(hash, fallback = false) {
+  const raw = String(hash || "").replace(/^#/, "");
+  let h;
+  try { h = decodeURIComponent(raw); } catch (e) { h = raw; }
+  if (h === "docs") {
+    return loadDocs().then(() => { enterDocs(); return true; });
+  }
+  if (h.startsWith("doc/")) {
+    const nm = h.slice(4);
+    return loadDocs().then(() => {
+      if (DOCS.find(d => d.name === nm)) selectDoc(nm);
+      else enterDocs();
+      return true;
+    });
+  }
+  if (h.startsWith("topic/")) {
+    const id = h.slice(6);
+    if (TOPIC_INDEX[id]) { selectTopic(id); return true; }
+  } else if (h.startsWith("qa/")) {
+    const id = h.slice(3);
+    if (QA_INDEX[id]) { selectQA(id); return true; }
+  } else if (h && TERMS[h]) {
+    select(h);
+    return true;
+  }
+  if (fallback && GROUPS[0]) {
+    select(GROUPS[0].terms[0].id);
+    return true;
+  }
+  return false;
+}
+window.addEventListener("hashchange", () => { routeHash(location.hash, false); });
+
 /* ---- Search filter ---- */
 const searchInput = document.getElementById("search");
 function applyFilter() {
@@ -3201,26 +3237,9 @@ async function boot() {
   btnFlat.classList.toggle("active", savedView !== "tree");
   renderSidebar(savedView);
   const initial = location.hash.slice(1);
-  if (initial === "docs") {                       // the Docs landing list
-    await loadDocs();
-    enterDocs();
-  } else if (initial.startsWith("doc/")) {        // deep link to a doc: #doc/<filename>
-    const nm = decodeURIComponent(initial.slice(4));
-    await loadDocs();
-    if (DOCS.find(d => d.name === nm)) selectDoc(nm);
-    // A link to a document that has since been renamed or removed should land
-    // on the list it belongs to, not on an unrelated term.
-    else enterDocs();
-  } else if (initial.startsWith("topic/") && TOPIC_INDEX[initial.slice(6)]) {
-    selectTopic(initial.slice(6));                // #topic/<id>
-    loadDocs();
-  } else if (initial.startsWith("qa/") && QA_INDEX[initial.slice(3)]) {
-    selectQA(initial.slice(3));                   // #qa/<id>
-    loadDocs();
-  } else {
-    select(TERMS[initial] ? initial : GROUPS[0].terms[0].id);
-    loadDocs();                                   // warm the docs cache so Search covers them immediately
-  }
+  const isDocs = initial === "docs" || initial.startsWith("doc/");
+  await routeHash(location.hash, !isDocs);
+  if (!isDocs) loadDocs();                        // warm the docs cache so Search covers them immediately
 }
 boot();
 
