@@ -300,6 +300,13 @@
       transform:translateY(-50%);width:auto;height:auto;background:none;
       border:0;border-radius:0;color:var(--muted);font-size:inherit;cursor:text}
     .toolbar .search-wrap.open #mainSearch{display:block}
+
+    /* Gutters sized for a desktop column cost a phone 52px of the 390 it has,
+       which is most of a word per line. Documents and previews get it back. */
+    .wrap{padding:14px 12px 80px}
+    .overlay{padding:3vh 8px}
+    .modal-head,.modal-foot{padding-left:12px;padding-right:12px}
+    .modal-body{padding:16px 12px}
   }
 
   @media(max-width:860px){

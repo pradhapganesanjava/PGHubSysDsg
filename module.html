@@ -184,11 +184,11 @@
       border-right: 0; border-bottom: 1px solid var(--border);
     }
 
-    main { padding: 20px 16px 64px; min-width: 0; }
-    .detail, .detail:has(.pdf-view), .sv-head, #search-results, #search-more, .sr-empty { max-width: 100%; }
-    .pdf-frame { height: 70vh; }
-    .boxes { grid-template-columns: 1fr; }
-    .ov-globe { height: 60vh; }
+    /* The rules for main, .detail, .pdf-frame, .boxes and .ov-globe live at the
+       end of this sheet, not here: their unprefixed versions are declared
+       further down, and a media block earlier in the sheet loses to a later
+       rule of equal specificity. Sitting here they were dead, which is why a
+       phone was still reading documents inside 48px desktop gutters. */
   }
 
   /* main must be allowed to shrink inside the flex layout at any width, or a
@@ -673,6 +673,25 @@
   .chip.trap { border-color:#e05a5a; color:#e05a5a; }
   .rich a.chip { text-decoration:none; color:var(--text); }
   .rich a.chip:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* ===== Narrow screens, continued =====
+     The rest of the stacked layout is up at the 860px block; these rules are
+     down here because each one overrides a base rule declared after that
+     block, and equal-specificity ties go to whichever came last. */
+  @media (max-width: 860px) {
+    main { padding: 20px 16px 64px; }
+    .detail, .detail:has(.pdf-view), .sv-head, #search-results, #search-more, .sr-empty { max-width: 100%; }
+    .pdf-frame { height: 70vh; }
+    .boxes { grid-template-columns: 1fr; }
+    .ov-globe { height: 60vh; }
+  }
+
+  /* Phones: the reading column is the whole point of the screen, so the
+     gutters shrink again — 16px a side is a word off every line at 390px.
+     Same breakpoint as the hub toolbar, kept in step deliberately. */
+  @media (max-width: 560px) {
+    main { padding: 16px 10px 56px; }
+  }
 </style>
 <style id="hl-tokens">
   .tok-kw  { color: #cc7832; font-weight: 600; }
