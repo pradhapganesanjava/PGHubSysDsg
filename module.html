@@ -404,11 +404,6 @@
   .rich th, .rich td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
   .rich th { background: var(--panel-2); color: var(--text); font-weight: 600; }
   .rich pre { margin: 8px 0; }
-  .rich pre.mermaid { text-align: center; }
-  .rich pre.mermaid.mermaid-rendered { background: transparent; border: none; padding: 8px 0; }
-  .rich pre.mermaid svg { max-width: 100%; height: auto; }
-  .rich a.chip { text-decoration: none; color: var(--text); }
-  .rich a.chip:hover { border-color: var(--accent); color: var(--accent); }
   .term-actions { display: flex; gap: 8px; margin: -2px 0 20px; }
   .term-actions .danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
 
@@ -670,6 +665,14 @@
   .diagram svg { display:block; max-width:100%; height:auto; color:var(--text); }
   .diagram-cap { color:var(--text); font-size:.9rem; line-height:1.5; margin:0 0 14px; }
   .diagram-cap strong { color:var(--text); }
+  .pan.go, .note.go, .callout.go { border-left:3px solid #3d9a6a; }
+  .pan.warn, .note.warn, .callout.warn { border-left:3px solid #e0803a; }
+  .pan.trap, .note.trap, .callout.trap { border-left:3px solid #e05a5a; }
+  .chip.go { border-color:#3d9a6a; color:#3d9a6a; }
+  .chip.warn { border-color:#e0803a; color:#e0803a; }
+  .chip.trap { border-color:#e05a5a; color:#e05a5a; }
+  .rich a.chip { text-decoration:none; color:var(--text); }
+  .rich a.chip:hover { border-color:var(--accent); color:var(--accent); }
 </style>
 <style id="hl-tokens">
   .tok-kw  { color: #cc7832; font-weight: 600; }
@@ -685,7 +688,6 @@
   [data-theme="soft"] .tok-ann, [data-theme="white"] .tok-ann, [data-theme="colorful"] .tok-ann, [data-theme="cartoon"] .tok-ann { color: #646464; }
   [data-theme="soft"] .tok-cls, [data-theme="white"] .tok-cls, [data-theme="colorful"] .tok-cls, [data-theme="cartoon"] .tok-cls { color: #267f99; }
 </style>
-<link rel="stylesheet" href="app/rich-readable.css">
 </head>
 <body>
   <header>
@@ -896,7 +898,7 @@
           <label>Content</label>
           <div class="note-toolbar" id="topic-content-toolbar"></div>
           <div class="note-editor" id="topic-content-editor" contenteditable="true"
-               data-placeholder="rich-readable — chips, tldr, boxes, mermaid. Paste images (Ctrl/&#8984;+V)."></div>
+               data-placeholder="chips, tldr, boxes, flow — paste images (Ctrl/&#8984;+V)."></div>
         </div>
         <div class="field">
           <label for="topic-group">Tags</label>
@@ -1325,7 +1327,6 @@ function selectTopic(id) {
   markActive(id);
   detail.innerHTML = topicDetailHTML(t);
   highlightPlainCodeBlocks(detail);
-  renderMermaid(detail);
   attachLinkPreviews(detail);
   mountTopicActions(detail, id);
   mountNotes(detail, topicNoteId(id), "topics");
@@ -2473,7 +2474,6 @@ function openTopicDrawer(id) {
   drawerTag.textContent = t._group ? t._group.tag : t.group;
   drawerBody.innerHTML = topicDetailHTML(t);
   highlightPlainCodeBlocks(drawerBody);
-  renderMermaid(drawerBody);
   attachLinkPreviews(drawerBody);
   mountTopicActions(drawerBody, id);
   mountNotes(drawerBody, topicNoteId(id), "topics");
@@ -2498,14 +2498,14 @@ const topicHead = document.querySelector("#topic-modal .modal-head h3");
 const topicCreateBtn = document.getElementById("topic-create");
 wireEditor(document.getElementById("topic-content-toolbar"), topicContent, "topic-content", "topics");
 const RICH_READABLE_SEED =
-  '<div class="rich-readable">' +
   '<div class="chips"><span class="chip">keyword</span></div>' +
   '<div class="tldr"><b>In one line:</b> </div>' +
   '<div class="scale">' +
   '<div class="pan go"><h4>Keep</h4><ul class="tight"><li></li></ul></div>' +
   '<div class="pan warn"><h4>Trade-off</h4><ul class="tight"><li></li></ul></div>' +
   '<div class="pan trap"><h4>Trap</h4><ul class="tight"><li></li></ul></div>' +
-  '</div></div>';
+  '</div>' +
+  '<pre class="flow">producer  →  bounded queue  →  consumer</pre>';
 let editingTopicId = null;
 
 function openTopicModal(id) {

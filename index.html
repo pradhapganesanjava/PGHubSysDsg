@@ -309,6 +309,13 @@
   .modal-body .tight li { margin:1px 0; }
   .modal-body .tldr { background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin:0 0 12px; }
   .modal-body .flow { white-space:pre;font-family:ui-monospace,Menlo,monospace;font-size:.8rem;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto; }
+  .modal-body .pan.go, .modal-body .note.go, .modal-body .callout.go { border-left:3px solid #3d9a6a; }
+  .modal-body .pan.warn, .modal-body .note.warn, .modal-body .callout.warn { border-left:3px solid #e0803a; }
+  .modal-body .pan.trap, .modal-body .note.trap, .modal-body .callout.trap { border-left:3px solid #e05a5a; }
+  .modal-body .chip.go { border-color:#3d9a6a;color:#3d9a6a; }
+  .modal-body .chip.warn { border-color:#e0803a;color:#e0803a; }
+  .modal-body .chip.trap { border-color:#e05a5a;color:#e05a5a; }
+  .modal-body a.chip { text-decoration:none;color:var(--text); }
 
   /* ===== Practice mode ===== */
   #practiceView{margin-top:10px;max-width:720px;margin-left:auto;margin-right:auto}
@@ -357,7 +364,6 @@
   .practice-body pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;
     overflow-x:auto;font-size:.82rem}
 </style>
-<link rel="stylesheet" href="app/rich-readable.css">
 </head>
 <body>
 <header id="topbanner">

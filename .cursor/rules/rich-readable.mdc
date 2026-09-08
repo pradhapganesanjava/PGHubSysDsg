@@ -1,42 +1,39 @@
 ---
-description: Author study content in the rich-readable scan-first layout (topics, terms, Q&A).
+description: How to build rich-readable study content (topics, terms, Q&A).
 alwaysApply: true
 ---
 
 # rich-readable
 
-Study content (topics especially; also term `what` / Q&A answers) is written as **rich-readable** HTML, not long paragraphs.
+An **instruction**, not a CSS class or a page badge. Write study HTML so it is scan-first: a reader should catch key words and the decision in a few seconds.
 
-Wrap the body in `<div class="rich-readable">`. That stamps a visible **rich-readable** mark and unlocks color roles.
+Do **not** wrap content in `.rich-readable`. Do **not** use mermaid — it reads as a sketch, not a study page. Use the helpers already in the app.
 
-## Shape
+## Build order
 
-1. Keyword **chips** at the top (`.chips` / `.chip`)
-2. One-line **tldr** (`.tldr`)
-3. Short **bullets** (`.tight`) — split long sentences
-4. **Bold** / `<span class="tag">` / `<code>` on key words
-5. **Boxes**: `.scale` > `.pan`, `.note`, `.callout`
-6. **Flow**: `<pre class="mermaid">` or `.flow` ASCII
-7. **See also** as `<a class="chip" href="#id">` (terms) or `#topic/id`
+1. **Chips** — `.chips` / `.chip` for the keywords of the page
+2. **Tldr** — `.tldr`, one or two sentences, bold the claim
+3. **Split prose** — long paragraphs become `.tight` bullets
+4. **Highlight** — `<b>`, `<code>`, `<span class="tag">` on terms that must pop
+5. **Boxes** — `.scale` > `.pan` for comparisons; `.note` for a trap; `.callout` / `.callout.tradeoff` for a scored line
+6. **Flow** — `<pre class="flow">` box-drawing / ASCII (same as the rest of the hub). Caption with `.diagram-cap` if needed
+7. **See also** — `<a class="chip" href="#id">` or `#topic/id` / `#qa/id`
 
-## Color roles
+## Color roles (existing classes)
 
-- `.go` — keep / do this (green)
-- `.warn` — trade-off (orange)
-- `.trap` — don't (red)
+- `.go` — keep / do this
+- `.warn` — trade-off
+- `.trap` — don’t
 
 ```html
-<div class="rich-readable">
-  <div class="chips"><span class="chip">keyword</span></div>
-  <div class="tldr"><b>In one line:</b> …</div>
-  <div class="scale">
-    <div class="pan go"><h4>Keep</h4><ul class="tight"><li>…</li></ul></div>
-    <div class="pan warn"><h4>Trade-off</h4></div>
-    <div class="pan trap"><h4>Trap</h4></div>
-  </div>
-  <pre class="mermaid">flowchart LR
-    A[in] --> B[out]</pre>
+<div class="chips"><span class="chip">keyword</span></div>
+<div class="tldr"><b>In one line:</b> the claim.</div>
+<div class="scale">
+  <div class="pan go"><h4>Keep</h4><ul class="tight"><li>…</li></ul></div>
+  <div class="pan warn"><h4>Trade-off</h4></div>
+  <div class="pan trap"><h4>Trap</h4></div>
 </div>
+<pre class="flow">producer  →  bounded queue  →  consumer</pre>
 ```
 
-Do not dump walls of prose. Do not invent one-off inline colors — use `.go` / `.warn` / `.trap`.
+Walls of prose and mermaid flowcharts are out of spec.
