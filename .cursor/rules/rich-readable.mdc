@@ -1,0 +1,42 @@
+---
+description: Author study content in the rich-readable scan-first layout (topics, terms, Q&A).
+alwaysApply: true
+---
+
+# rich-readable
+
+Study content (topics especially; also term `what` / Q&A answers) is written as **rich-readable** HTML, not long paragraphs.
+
+Wrap the body in `<div class="rich-readable">`. That stamps a visible **rich-readable** mark and unlocks color roles.
+
+## Shape
+
+1. Keyword **chips** at the top (`.chips` / `.chip`)
+2. One-line **tldr** (`.tldr`)
+3. Short **bullets** (`.tight`) — split long sentences
+4. **Bold** / `<span class="tag">` / `<code>` on key words
+5. **Boxes**: `.scale` > `.pan`, `.note`, `.callout`
+6. **Flow**: `<pre class="mermaid">` or `.flow` ASCII
+7. **See also** as `<a class="chip" href="#id">` (terms) or `#topic/id`
+
+## Color roles
+
+- `.go` — keep / do this (green)
+- `.warn` — trade-off (orange)
+- `.trap` — don't (red)
+
+```html
+<div class="rich-readable">
+  <div class="chips"><span class="chip">keyword</span></div>
+  <div class="tldr"><b>In one line:</b> …</div>
+  <div class="scale">
+    <div class="pan go"><h4>Keep</h4><ul class="tight"><li>…</li></ul></div>
+    <div class="pan warn"><h4>Trade-off</h4></div>
+    <div class="pan trap"><h4>Trap</h4></div>
+  </div>
+  <pre class="mermaid">flowchart LR
+    A[in] --> B[out]</pre>
+</div>
+```
+
+Do not dump walls of prose. Do not invent one-off inline colors — use `.go` / `.warn` / `.trap`.
