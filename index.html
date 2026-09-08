@@ -162,8 +162,7 @@
   #mainSearch{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);
     border-radius:11px;padding:12px 14px 12px 40px;font-size:.95rem;font-family:inherit}
   #mainSearch:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-  .search-wrap .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);
-    background:none;border:0;padding:0;font:inherit;line-height:1;cursor:text}
+  .search-wrap .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted)}
   .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--border);border-radius:9px;overflow:hidden}
   .seg button{background:transparent;border:0;color:var(--muted);padding:7px 13px;font-size:.85rem;
     cursor:pointer;font-family:inherit}
@@ -269,6 +268,35 @@
   .scrim{display:none}
   .seg button .i{margin-right:5px}
 
+  /* Narrow: one row, by holding the search as its own icon and only handing it
+     the row while it is being used. The input's 180px basis plus the view
+     switcher, reload and status stop fitting at about 700px, and before this
+     the search took a whole line to itself the moment they did. Ported from
+     the Tech Hub, breakpoint and all, so the two headers behave alike. */
+  @media(max-width:700px){
+    .toolbar{flex-wrap:nowrap;gap:8px}
+    .seg button{padding:7px 10px}
+    .toolbar .status{font-size:.76rem;min-width:0;overflow:hidden;text-overflow:ellipsis}
+    .toolbar .search-wrap{flex:0 0 38px;max-width:38px}
+    .toolbar .search-wrap .mag{position:static;display:flex;align-items:center;justify-content:center;
+      width:38px;height:38px;border:1px solid var(--border);border-radius:9px;
+      background:var(--panel-2);color:var(--text);transform:none;cursor:pointer}
+    .toolbar .search-wrap .mag:hover{border-color:var(--accent)}
+    .toolbar #mainSearch{display:none}
+
+    /* Open: the box takes the row from the controls it displaces. They are one
+       tap away again the moment it closes, and closing is automatic once the
+       box is left empty. */
+    body.search-on .toolbar .search-wrap{flex:1 1 auto;max-width:none}
+    body.search-on .toolbar .search-wrap .mag{position:absolute;left:14px;top:50%;
+      transform:translateY(-50%);width:auto;height:auto;border:0;background:none;
+      color:var(--muted);display:block}
+    body.search-on .toolbar #mainSearch{display:block}
+    body.search-on .toolbar .seg,
+    body.search-on .toolbar #refresh,
+    body.search-on .toolbar .status{display:none}
+  }
+
   /* Phones: the row still needs two lines, but only two. The view switcher
      drops to its icons — the label is on hover and in aria-label — which is
      what lets the refresh button and the status join it rather than claim a
@@ -280,26 +308,6 @@
     .seg button .i{margin-right:0}
     .seg button{padding:7px 12px;font-size:1rem}
     .toolbar{gap:8px}
-
-    /* The placeholder alone is wider than a phone, so the box claimed a second
-       row before the page had said anything. Collapsed it is just the icon,
-       which leaves the whole toolbar on one line at load; tapping it opens the
-       input across a row of its own, and leaving it empty puts it back. */
-    .toolbar .search-wrap{flex:0 0 auto;width:38px;height:38px}
-    .toolbar .search-wrap .mag{position:static;transform:none;display:flex;
-      align-items:center;justify-content:center;width:38px;height:38px;
-      background:var(--panel-2);border:1px solid var(--border);border-radius:9px;
-      color:var(--text);font-size:1.05rem;cursor:pointer}
-    .toolbar .search-wrap .mag:hover{border-color:var(--accent)}
-    .toolbar .search-wrap #mainSearch{display:none}
-
-    /* Open, the input claims a row of its own; order:-1 sends it to the top so
-       the nav toggle is not left alone on a line above it. */
-    .toolbar .search-wrap.open{flex:1 1 100%;width:auto;height:auto;order:-1}
-    .toolbar .search-wrap.open .mag{position:absolute;left:14px;top:50%;
-      transform:translateY(-50%);width:auto;height:auto;background:none;
-      border:0;border-radius:0;color:var(--muted);font-size:inherit;cursor:text}
-    .toolbar .search-wrap.open #mainSearch{display:block}
 
     /* Gutters sized for a desktop column cost a phone 52px of the 390 it has,
        which is most of a word per line. Documents and previews get it back. */
@@ -434,7 +442,7 @@
     <div class="toolbar">
       <button class="iconbtn" id="navToggle" title="Show / hide contents" aria-label="Toggle contents">☰</button>
       <div class="search-wrap">
-        <button type="button" class="mag" id="searchToggle" aria-label="Search" aria-expanded="false" aria-controls="mainSearch">🔎</button>
+        <span class="mag" id="searchIcon" role="button" tabindex="0" aria-label="Search">🔎</span>
         <input id="mainSearch" type="search" placeholder="Search everything — terms, Q&amp;A, topics, documents…" autocomplete="off">
       </div>
       <div class="seg" id="viewSeg">
@@ -824,33 +832,36 @@ async function runFullTextSearch(q){
   }
 }
 
-/* On a phone the box is collapsed to its icon (see the 560px media query), so
-   the icon has to open it; on a wider window it is only ever the input's
-   label, and clicking it should land the caret in the box. Closing again is
-   left to an empty blur or Escape, so a typed query is never thrown away. */
-const searchWrap = document.querySelector(".toolbar .search-wrap");
-const searchToggle = document.getElementById("searchToggle");
-const searchCollapses = () => window.matchMedia("(max-width:560px)").matches;
-
-function setSearchOpen(open){
-  searchWrap.classList.toggle("open", open);
-  searchToggle.setAttribute("aria-expanded", open ? "true" : "false");
+/* Below 700px the box is collapsed to its icon (see the media query), which is
+   what keeps the toolbar on one row on arrival. Opening it hands it the row; it
+   closes itself again as soon as it is left empty, so nothing has to be
+   dismissed deliberately. */
+const NARROW_SEARCH = "(max-width:700px)";
+const searchIcon = document.getElementById("searchIcon");
+function openSearch(){
+  if (matchMedia(NARROW_SEARCH).matches) document.body.classList.add("search-on");
+  mainSearch.focus();
 }
-
-searchToggle.addEventListener("click", () => {
-  if (!searchCollapses()) { mainSearch.focus(); return; }
-  const open = !searchWrap.classList.contains("open");
-  setSearchOpen(open);
-  if (open) mainSearch.focus();
+function closeSearchIfEmpty(){
+  if (!mainSearch.value.trim()) document.body.classList.remove("search-on");
+}
+searchIcon.addEventListener("click", () => {
+  if (!document.body.classList.contains("search-on")) openSearch();
 });
-mainSearch.addEventListener("blur", () => {
-  if (searchCollapses() && !mainSearch.value.trim()) setSearchOpen(false);
+searchIcon.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSearch(); }
 });
+mainSearch.addEventListener("blur", closeSearchIfEmpty);
 mainSearch.addEventListener("keydown", e => {
-  if (e.key !== "Escape" || !searchCollapses()) return;
+  if (e.key !== "Escape") return;
   mainSearch.value = "";
   runFullTextSearch("");
-  setSearchOpen(false);
+  mainSearch.blur();                       // blur closes it; this only clears first
+  document.body.classList.remove("search-on");
+});
+// Back on a wide window the class would leave the controls hidden for no reason.
+matchMedia(NARROW_SEARCH).addEventListener("change", e => {
+  if (!e.matches) document.body.classList.remove("search-on");
 });
 
 let searchDebounce;
