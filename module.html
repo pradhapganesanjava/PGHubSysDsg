@@ -404,6 +404,11 @@
   .rich th, .rich td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
   .rich th { background: var(--panel-2); color: var(--text); font-weight: 600; }
   .rich pre { margin: 8px 0; }
+  .rich pre.mermaid { text-align: center; }
+  .rich pre.mermaid.mermaid-rendered { background: transparent; border: none; padding: 8px 0; }
+  .rich pre.mermaid svg { max-width: 100%; height: auto; }
+  .rich a.chip { text-decoration: none; color: var(--text); }
+  .rich a.chip:hover { border-color: var(--accent); color: var(--accent); }
   .term-actions { display: flex; gap: 8px; margin: -2px 0 20px; }
   .term-actions .danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
 
@@ -1319,6 +1324,7 @@ function selectTopic(id) {
   markActive(id);
   detail.innerHTML = topicDetailHTML(t);
   highlightPlainCodeBlocks(detail);
+  renderMermaid(detail);
   attachLinkPreviews(detail);
   mountTopicActions(detail, id);
   mountNotes(detail, topicNoteId(id), "topics");
@@ -2466,6 +2472,7 @@ function openTopicDrawer(id) {
   drawerTag.textContent = t._group ? t._group.tag : t.group;
   drawerBody.innerHTML = topicDetailHTML(t);
   highlightPlainCodeBlocks(drawerBody);
+  renderMermaid(drawerBody);
   attachLinkPreviews(drawerBody);
   mountTopicActions(drawerBody, id);
   mountNotes(drawerBody, topicNoteId(id), "topics");
