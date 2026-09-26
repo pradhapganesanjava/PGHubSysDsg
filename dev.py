@@ -12,6 +12,9 @@ makes Google reject the sign-in popup with origin_mismatch.
 
 Run:  python3 dev.py          then open http://localhost:5173/
       python3 dev.py 5174     (must also be a registered origin)
+
+If the port is taken, the next free one up is used (5174, 5175, …). That port
+must also be a registered origin, or sign-in fails.
 """
 import errno
 import os
@@ -20,6 +23,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", "5173"))
+MAX_TRIES = 20
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -47,17 +51,25 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     HTTPServer.allow_reuse_address = True
-    try:
-        httpd = HTTPServer(("127.0.0.1", PORT), Handler)
-    except OSError as e:
-        if e.errno != errno.EADDRINUSE:
-            raise
+    for port in range(PORT, PORT + MAX_TRIES):
+        try:
+            httpd = HTTPServer(("127.0.0.1", port), Handler)
+            break
+        except OSError as e:
+            if e.errno != errno.EADDRINUSE:
+                raise
+    else:
         sys.exit(
-            f"\n  Port {PORT} is already in use — something else is serving on it.\n"
+            f"\n  Ports {PORT}–{PORT + MAX_TRIES - 1} are all in use.\n"
             f"  Pick another with:  python3 dev.py <port>\n"
-            f"  Remember to add http://localhost:<port> to the OAuth client's\n"
-            f"  authorized JavaScript origins, or Google will refuse sign-in.\n"
         )
+    if port != PORT:
+        print(
+            f"  Port {PORT} is in use — using {port} instead.\n"
+            f"  Add http://localhost:{port} to the OAuth client's authorized\n"
+            f"  JavaScript origins, or Google will refuse sign-in.\n"
+        )
+    PORT = port
     print(f"  SysDsgHub  →  http://localhost:{PORT}/")
     print("  (sign in with the Google account that owns the Drive folder)\n")
     try:
