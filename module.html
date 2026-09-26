@@ -674,6 +674,56 @@
   .rich a.chip { text-decoration:none; color:var(--text); }
   .rich a.chip:hover { border-color:var(--accent); color:var(--accent); }
 
+  /* ===== staged designs (DSA x System Design) =====
+     One design is told as four stages, each fixing what broke in the one
+     before. Everything below is keyed off a single per-stage colour --c, set
+     by .s1..s4, so a stage's rail, chip, heading and panel always agree. The
+     tints are color-mix against the live background rather than fixed pastels,
+     so the same markup reads correctly on the dark themes and the light ones
+     without a per-theme override. */
+  .s1 { --c:#35a06a; } .s2 { --c:#4a86d8; } .s3 { --c:#8f5fd4; } .s4 { --c:#d9722e; }
+
+  /* The four-up strip at the top of a design: the whole arc at a glance. */
+  .stagebar { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 20px; }
+  .stagebar .st { flex:1 1 160px; min-width:150px; background:var(--panel-2);
+    border:1px solid var(--border); border-top:3px solid var(--c); border-radius:8px; padding:9px 11px; }
+  .stagebar .st .lvl { font-size:.66rem; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--c); }
+  .stagebar .st .nm { font-weight:650; font-size:.9rem; margin:3px 0 4px; }
+  .stagebar .st .fx { font-size:.78rem; color:var(--muted); line-height:1.45; }
+
+  /* A stage's own section. The rail carries the stage colour down the page. */
+  .stage { border:1px solid var(--border); border-left:3px solid var(--c);
+    border-radius:10px; padding:2px 15px 14px; margin:18px 0;
+    background:color-mix(in srgb, var(--c) 7%, transparent); }
+  .stage > h3 { display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+    margin:14px 0 8px; font-size:1.02rem; }
+  .stage > h3 .lvl { font-size:.64rem; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--c); border:1px solid var(--c);
+    border-radius:20px; padding:1px 8px; }
+  .stage .mm { margin:6px 0 10px; }
+  .stage .mm b { color:var(--c); }
+
+  /* "What breaks, and which stage fixes it" — the hinge between stages. */
+  .pressure { display:flex; gap:9px; align-items:flex-start; margin:12px 0 2px;
+    background:var(--panel-2); border:1px solid var(--border);
+    border-left:3px solid var(--c); border-radius:8px; padding:9px 12px; font-size:.86rem; }
+  .pressure .arw { color:var(--c); font-weight:700; flex:0 0 auto; }
+
+  /* Measured numbers pulled out of the demos, so a claim carries its evidence. */
+  .metrics { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .metric { flex:1 1 130px; background:var(--panel-2); border:1px solid var(--border);
+    border-radius:8px; padding:7px 10px; }
+  .metric .v { font-weight:700; font-size:1.02rem; color:var(--c); font-variant-numeric:tabular-nums; }
+  .metric .k { font-size:.72rem; color:var(--muted); line-height:1.35; margin-top:1px; }
+
+  /* Stage-tinted table rows, for the stage-by-stage comparison grids. */
+  .rich table td.s1, .rich table td.s2, .rich table td.s3, .rich table td.s4,
+  .rich table th.s1, .rich table th.s2, .rich table th.s3, .rich table th.s4 {
+    background:color-mix(in srgb, var(--c) 12%, transparent); }
+  .rich table th.s1, .rich table th.s2, .rich table th.s3, .rich table th.s4 { color:var(--c); }
+  .chip.s1, .chip.s2, .chip.s3, .chip.s4 { border-color:var(--c); color:var(--c); }
+
   /* ===== Narrow screens, continued =====
      The rest of the stacked layout is up at the 860px block; these rules are
      down here because each one overrides a base rule declared after that
@@ -1048,9 +1098,12 @@ const CODE_KEYWORDS = new Set(["class","def","for","in","if","else","elif","retu
 function highlightCode(code) {
   const span = (color, text) => `<span style="color:${color}">${escapeHtml(text)}</span>`;
   // `--` needs a following space to count as a SQL comment, so JS `i--` survives
-  const re = /(#[^\n]*|\/\/[^\n]*|--[ \t][^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\d._]*\b)|([A-Za-z_]\w*)|(\s+)|([^\s\w])/g;
-  let out = "", m, prev = null;
+  // numbers keep a trailing unit (30s, 800ms, 32Gi, 3f9c1e)
+  const re = /(#[^\n]*|\/\/[^\n]*|--[ \t][^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\w.]*)|([A-Za-z_]\w*)|(\s+)|([^\s\w])/g;
+  let out = "", m, prev = null, last = 0;
   while ((m = re.exec(code)) !== null) {
+    out += escapeHtml(code.slice(last, m.index));   // never drop text no branch matched
+    last = re.lastIndex;
     const [, comment, str, num, ident, ws, other] = m;
     if (comment !== undefined) { out += span("var(--muted)", comment); prev = null; }
     else if (str !== undefined) { out += span("#1f9e8a", str); prev = null; }
@@ -1065,7 +1118,7 @@ function highlightCode(code) {
     else if (ws !== undefined) { out += ws; /* keep prev so `def <name>` still links */ }
     else { out += escapeHtml(other); prev = null; }
   }
-  return out;
+  return out + escapeHtml(code.slice(last));
 }
 
 /* Colorize plain code blocks in already-mounted HTML (term `what`, QA answers),
@@ -1235,12 +1288,16 @@ function renderTreeNode(node, container, depth, opts) {
     group.appendChild(head);
     const items = document.createElement("div");
     items.className = "group-items";
-    renderTreeNode(child, items, depth + 1, opts);    // nested sub-tags first
-    child.terms.forEach(t => {
+    const leaf = t => {
       const el = mk(t);
       el.style.paddingLeft = (22 + depth * 12) + "px";
       items.appendChild(el);
-    });
+    };
+    // "."-prefixed items (e.g. ".Creational — Overview") head their tag, above sub-tags
+    const pinned = t => navLabel(t).startsWith(".");
+    child.terms.filter(pinned).forEach(leaf);
+    renderTreeNode(child, items, depth + 1, opts);    // nested sub-tags next
+    child.terms.filter(t => !pinned(t)).forEach(leaf);
     group.appendChild(items);
     container.appendChild(group);
   });
