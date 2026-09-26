@@ -1,0 +1,7 @@
+{
+  "name": "pghubsysdsg",
+  "private": true,
+  "scripts": {
+    "dev": "python3 dev.py"
+  }
+}
