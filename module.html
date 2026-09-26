@@ -743,6 +743,29 @@
     main { padding: 16px 10px 56px; }
   }
 
+  /* ===== Previous / Next ===== */
+  .pager { display: flex; align-items: stretch; gap: 10px; }
+  .pager-top { margin: 0 0 14px; font-size: 12px; align-items: center; }
+  .pager-bottom { margin: 28px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .pager .pg { flex: 1 1 0; min-width: 0; text-decoration: none; color: var(--text); display: flex; flex-direction: column; gap: 3px; }
+  .pager .pg-next { text-align: right; align-items: flex-end; }
+  .pager .pg-dir { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+  .pager .pg-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .pager-top .pg { flex-direction: row; gap: 6px; align-items: baseline; color: var(--muted); }
+  .pager-top .pg-next { justify-content: flex-end; }
+  .pager-top .pg-title { white-space: nowrap; }
+  .pager-top .pg:hover .pg-title { color: var(--text); }
+  .pager-top .pg-pos { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pager-bottom .pg { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--panel); }
+  .pager-bottom .pg:hover { border-color: var(--accent); }
+  .pager-bottom .pg-title { font-weight: 600; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .pager-bottom .pg-none { border: 0; background: none; padding: 0; }
+  @media (max-width: 560px) {
+    .pager-top .pg-dir { display: none; }
+    .pager-top .pg-prev .pg-title::before { content: "‹ "; }
+    .pager-top .pg-next .pg-title::after { content: " ›"; }
+  }
+
   /* ===== Code tabs — adjacent Java / Python / … samples shown as one tabbed block ===== */
   .code-tabs { margin: 0 0 1em; }
   .code-tabs .ct-bar { display: flex; gap: 2px; flex-wrap: wrap; }
@@ -1211,8 +1234,8 @@ function notesSectionHTML() {
 const nav = document.getElementById("nav");
 let sidebarMode = "tree";
 let navSection = "terms";            // "terms" | "qa" | "topics" | "docs"
-function navGroups() { return navSection === "qa" ? QA_GROUPS : navSection === "topics" ? TOPIC_GROUPS : GROUPS; }
-function navIndex() { return navSection === "qa" ? QA_INDEX : navSection === "topics" ? TOPIC_INDEX : TERMS; }
+function navGroups(s = navSection) { return s === "qa" ? QA_GROUPS : s === "topics" ? TOPIC_GROUPS : GROUPS; }
+function navIndex(s = navSection) { return s === "qa" ? QA_INDEX : s === "topics" ? TOPIC_INDEX : TERMS; }
 function navOpen(id) { return navSection === "qa" ? selectQA(id) : navSection === "topics" ? selectTopic(id) : select(id); }
 function renderSidebar(mode) {
   sidebarMode = mode;
@@ -1241,6 +1264,7 @@ function renderSidebar(mode) {
   applyFilter();
   const activeId = navSection === "qa" ? currentQAId : navSection === "topics" ? currentTopicId : currentId;
   if (activeId) markActive(activeId);
+  refreshPagers();
 }
 function itemEl(t) {
   const el = document.createElement("div");
@@ -1278,6 +1302,59 @@ function countTree(node) {
   node.order.forEach(k => (n += countTree(node.children[k])));
   return n;
 }
+const navPinned = t => navLabel(t).startsWith(".");
+/* the items of a tree, in exactly the order renderTreeNode lays them out */
+function treeOrder(node, out = []) {
+  node.order.forEach(key => {
+    const child = node.children[key];
+    child.terms.filter(navPinned).forEach(t => out.push(t));
+    treeOrder(child, out);
+    child.terms.filter(t => !navPinned(t)).forEach(t => out.push(t));
+  });
+  return out;
+}
+/* Terms / Q&A / Topics in left-nav order for the current Tree / Flat view.
+   Built from live data on every call, so new, renamed and re-tagged items
+   land in the right place with no extra bookkeeping. */
+function navOrder(section) {
+  return sidebarMode === "flat"
+    ? Object.values(navIndex(section)).slice().sort(alphaTitle)
+    : treeOrder(buildTree(navGroups(section)));
+}
+
+/* ---- Previous / Next ----
+   A compact bar above each Term, Q&A and Topic and a full pair below it, each
+   naming the neighbour it leads to. They are real links (#id, #qa/<id>,
+   #topic/<id>) routed by routeHash, so middle-click, copy-link and the Back
+   button all work. Rebuilt on every sidebar render, so the neighbours follow
+   the Tree / Flat view and any item just added, renamed or deleted. */
+const PAGER_HASH = { terms: id => "#" + encodeURIComponent(id), qa: id => "#qa/" + encodeURIComponent(id), topics: id => "#topic/" + encodeURIComponent(id) };
+const PAGER_NOUN = { terms: "term", qa: "Q&A", topics: "topic" };
+function mountPager(section, id) {
+  detail.querySelectorAll(":scope > .pager").forEach(p => p.remove());
+  const top = document.createElement("nav"), bottom = document.createElement("nav");
+  top.className = "pager pager-top"; bottom.className = "pager pager-bottom";
+  [top, bottom].forEach(p => { p.dataset.section = section; p.dataset.id = id; p.setAttribute("aria-label", "Previous and next " + PAGER_NOUN[section]); });
+  detail.prepend(top); detail.append(bottom);
+  fillPager(top); fillPager(bottom);
+}
+function fillPager(p) {
+  const section = p.dataset.section, id = p.dataset.id;
+  const list = navOrder(section), i = list.findIndex(t => t.id === id);
+  if (i < 0) { p.innerHTML = ""; return; }
+  const prev = list[i - 1], next = list[i + 1];
+  const link = (t, dir) => {
+    if (!t) return `<span class="pg pg-${dir} pg-none"></span>`;
+    const title = escapeHtml(navLabel(t)).replace(/"/g, "&quot;");
+    return `<a class="pg pg-${dir}" href="${PAGER_HASH[section](t.id)}" title="${title}">` +
+      `<span class="pg-dir">${dir === "prev" ? "‹ Previous" : "Next ›"}</span><span class="pg-title">${title}</span></a>`;
+  };
+  p.innerHTML = link(prev, "prev") +
+    (p.classList.contains("pager-top") ? `<span class="pg-pos">${i + 1} / ${list.length}</span>` : "") +
+    link(next, "next");
+}
+function refreshPagers() { detail.querySelectorAll(":scope > .pager").forEach(fillPager); }
+
 function renderTreeNode(node, container, depth, opts) {
   opts = opts || {};
   const mk = opts.item || itemEl;
@@ -1309,11 +1386,11 @@ function renderTreeNode(node, container, depth, opts) {
       el.style.paddingLeft = (22 + depth * 12) + "px";
       items.appendChild(el);
     };
-    // "."-prefixed items (e.g. ".Creational — Overview") head their tag, above sub-tags
-    const pinned = t => navLabel(t).startsWith(".");
-    child.terms.filter(pinned).forEach(leaf);
+    // "."-prefixed items (e.g. ".Creational — Overview") head their tag, above sub-tags.
+    // treeOrder() mirrors this order for Previous / Next — keep the two in step.
+    child.terms.filter(navPinned).forEach(leaf);
     renderTreeNode(child, items, depth + 1, opts);    // nested sub-tags next
-    child.terms.filter(t => !pinned(t)).forEach(leaf);
+    child.terms.filter(t => !navPinned(t)).forEach(leaf);
     group.appendChild(items);
     container.appendChild(group);
   });
@@ -1413,6 +1490,7 @@ function select(id) {
   detail.querySelectorAll(".pill").forEach(p => p.addEventListener("click", () => select(p.dataset.id)));
   mountTermActions(detail, id);
   mountNotes(detail, id);
+  mountPager("terms", id);
   history.replaceState(null, "", "#" + id);
   document.getElementById("main").scrollTop = 0;
 }
@@ -1427,6 +1505,7 @@ function selectQA(id) {
   highlightPlainCodeBlocks(detail);
   mountQAActions(detail, id);
   mountNotes(detail, qaNoteId(id), "qa");
+  mountPager("qa", id);
   history.replaceState(null, "", "#qa/" + id);
   document.getElementById("main").scrollTop = 0;
 }
@@ -1442,6 +1521,7 @@ function selectTopic(id) {
   attachLinkPreviews(detail);
   mountTopicActions(detail, id);
   mountNotes(detail, topicNoteId(id), "topics");
+  mountPager("topics", id);
   history.replaceState(null, "", "#topic/" + id);
   document.getElementById("main").scrollTop = 0;
 }
