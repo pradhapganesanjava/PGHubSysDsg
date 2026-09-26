@@ -742,6 +742,22 @@
   @media (max-width: 560px) {
     main { padding: 16px 10px 56px; }
   }
+
+  /* ===== Code tabs — adjacent Java / Python / … samples shown as one tabbed block ===== */
+  .code-tabs { margin: 0 0 1em; }
+  .code-tabs .ct-bar { display: flex; gap: 2px; flex-wrap: wrap; }
+  .code-tabs .ct-tab {
+    font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1; color: var(--muted);
+    background: transparent; border: 1px solid transparent; border-bottom: 0;
+    border-radius: 8px 8px 0 0; padding: 8px 14px; cursor: pointer;
+  }
+  .code-tabs .ct-tab:hover { color: var(--text); }
+  .code-tabs .ct-tab[aria-selected="true"] {
+    color: var(--accent); background: var(--code-bg); border-color: var(--border);
+    position: relative; top: 1px;
+  }
+  .code-tabs > .ct-pane { margin: 0 !important; border-top-left-radius: 0; }
+  .code-tabs > [hidden], .code-tabs [hidden] { display: none !important; }
 </style>
 <style id="hl-tokens">
   .tok-kw  { color: #cc7832; font-weight: 600; }
@@ -2857,7 +2873,7 @@ function renderMarkdown(md) {
         // only colorize fences that declare a language; bare ``` fences in these
         // docs are ASCII diagrams / prose flows, which highlighting would just noise up.
         const src = buf.join("\n");
-        html += `<pre${at(start)}><code>${lang ? highlightCode(src) : escapeHtml(src)}</code></pre>`;
+        html += `<pre${at(start)}><code${lang ? ` class="language-${escapeHtml(lang)}"` : ""}>${lang ? highlightCode(src) : escapeHtml(src)}</code></pre>`;
       }
       continue;
     }
@@ -3473,6 +3489,189 @@ const HLMOD = (function () {
   const roots = ["main", "drawer"].map(id => document.getElementById(id)).filter(Boolean);
   (roots.length ? roots : [document.body]).forEach(r => obs.observe(r, { childList: true, subtree: true }));
   hlScan(document);
+})();
+
+/* ===== Code tabs =====
+   Content often shows the same solution once per language, stacked. Three shapes:
+     - "### Python Code" + block, then "### Java Code" + block
+     - bare blocks tagged language-python / language-java, side by side
+     - topic code cards: a "🐍 Python · strategy.py" label over a block (+ output line)
+   Each such run folds into one tabbed section, Python first. Display-only: editors
+   load from stored data, never from this DOM, and live editors are skipped. The
+   chosen language is remembered and applied to every tab group. */
+(function () {
+  const LANGS = {
+    java: "Java", python: "Python", py: "Python", python3: "Python",
+    javascript: "JavaScript", js: "JavaScript", typescript: "TypeScript", ts: "TypeScript",
+    go: "Go", golang: "Go", cpp: "C++", "c++": "C++", c: "C", csharp: "C#", cs: "C#",
+    kotlin: "Kotlin", kt: "Kotlin", rust: "Rust", scala: "Scala", ruby: "Ruby", swift: "Swift",
+  };
+  const NAMES = [...new Set(Object.values(LANGS))];
+  const alt = NAMES.map(n => n.replace(/[+#]/g, "\\$&")).join("|");
+  const nameRe = new RegExp("(?:^|[\\s(])(" + alt + ")(?=$|[\\s):])", "i");
+  // card label: the language first, then nothing or "· file" — "🐍 Python · strategy.py"
+  const cardRe = new RegExp("^[^\\w]*(" + alt + ")\\s*(?:·.*)?$", "i");
+  const canon = s => NAMES.find(n => n.toLowerCase() === s.toLowerCase());
+  const KEY = "sysdsg_codeTab";
+  let pref = null;
+  try { pref = localStorage.getItem(KEY); } catch (e) {}
+
+  const isHeading = el => /^H[2-6]$/.test(el.tagName);
+  const codeOf = el => el && el.tagName === "PRE" && !el.classList.contains("mermaid") && el.querySelector(":scope > code");
+  function langOfCode(code) {
+    const m = (code.className || "").match(/language-([\w+#-]+)/) || [null, code.dataset.lang];
+    return LANGS[(m[1] || "").toLowerCase()] || null;
+  }
+  function langOfHeading(h) {
+    const t = h.textContent.trim();
+    if (t.length > 60) return null;
+    const m = t.match(nameRe);
+    // only headings that are *about* the code ("Java Code", "Reference Implementation (Java)"),
+    // not ones that merely mention a language in passing.
+    return m && /code|implementation|solution|version|\(/i.test(t) ? canon(m[1]) : null;
+  }
+  // a code card, possibly inside single-child wrappers: label div directly above a <pre>
+  function cardOf(el) {
+    for (let c = el, k = 0; c && k < 3; k++) {
+      const lab = c.firstElementChild;
+      if (lab && lab.tagName === "DIV" && codeOf(lab.nextElementSibling)) {
+        const m = lab.textContent.trim().match(cardRe);
+        if (m) return { lab, lang: canon(m[1]) };
+      }
+      if (c.children.length !== 1) break;
+      c = c.firstElementChild;
+    }
+    return null;
+  }
+  // spacer elements between two samples don't break a run
+  const isBlank = el => el && !el.textContent.trim() && !el.querySelector("img, svg, pre, iframe, video");
+  function nextOf(el) {
+    let n = el.nextElementSibling;
+    while (isBlank(n)) n = n.nextElementSibling;
+    return n;
+  }
+
+  // a unit: one pane (a <pre> or a whole card), the heading/label it came with, its language
+  function unitAt(el) {
+    if (isHeading(el)) {
+      const hl = langOfHeading(el), pre = el.nextElementSibling;
+      if (!hl || !codeOf(pre)) return null;
+      return { heading: el, pane: pre, lang: hl, label: hl, next: nextOf(pre) };
+    }
+    if (el.tagName === "DIV") {
+      const card = cardOf(el);
+      return card && { heading: null, pane: el, lang: card.lang, label: card.lab.textContent.trim(), labEl: card.lab, next: nextOf(el) };
+    }
+    const code = codeOf(el), lang = code && langOfCode(code);
+    return lang ? { heading: null, pane: el, lang, label: lang, next: nextOf(el) } : null;
+  }
+
+  // tab order: Python, Java, then the rest as they appear
+  const ORDER = ["Python", "Java"];
+  const rank = u => { const i = ORDER.indexOf(u.lang); return i < 0 ? ORDER.length : i; };
+
+  function build(units) {
+    const first = units[0], box = document.createElement("div");
+    box.className = "code-tabs";
+    const bar = document.createElement("div");
+    bar.className = "ct-bar"; bar.setAttribute("role", "tablist");
+    box.appendChild(bar);
+    if (first.heading) {
+      // keep one heading, minus the language: "Reference Implementation (Python)" -> "Reference Implementation"
+      const h = first.heading;
+      const txt = h.textContent.replace(new RegExp("(^|\\s)\\(?\\s*" + first.lang.replace(/[+#]/g, "\\$&") + "\\s*\\)?(?=$|[\\s:])", "i"), "$1")
+        .replace(/\s{2,}/g, " ").trim();
+      h.textContent = txt || "Code";
+    }
+    first.pane.parentNode.insertBefore(box, first.pane);
+    const sorted = units.map((u, i) => [u, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(p => p[0]);
+    sorted.forEach(u => {
+      if (u !== first && u.heading) u.heading.remove();
+      if (u.labEl) u.labEl.hidden = true;               // the tab carries the label now
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "ct-tab"; b.textContent = u.label;
+      b.setAttribute("role", "tab"); b.dataset.lang = u.lang;
+      bar.appendChild(b);
+      u.pane.classList.add("ct-pane");
+      box.appendChild(u.pane);
+    });
+    select(box, units.some(u => u.lang === pref) ? pref : sorted[0].lang);
+  }
+
+  function select(box, lang) {
+    const tabs = box.querySelectorAll(":scope > .ct-bar > .ct-tab");
+    const panes = box.querySelectorAll(":scope > .ct-pane");
+    tabs.forEach((b, i) => {
+      const on = b.dataset.lang === lang;
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      panes[i].hidden = !on;
+    });
+  }
+
+  function scan(root) {
+    if (!root || !root.querySelectorAll) return;
+    const parents = new Set();
+    root.querySelectorAll("pre > code").forEach(c => {
+      if (c.closest(".code-tabs") || c.closest('[contenteditable="true"], [contenteditable=""]')) return;
+      // candidates: the <pre>'s parent, and for cards the parents of up to 3 single-child wrappers
+      let el = c.parentElement;
+      for (let k = 0; k < 4 && el.parentElement; k++) {
+        parents.add(el.parentElement);
+        if (el.parentElement.children.length !== 1 && k > 0) break;
+        el = el.parentElement;
+      }
+    });
+    parents.forEach(p => {
+      let el = p.firstElementChild;
+      while (el) {
+        const run = [];
+        let u = unitAt(el);
+        // a run needs 2+ distinct languages; a repeated language ends it
+        while (u && !run.some(r => r.lang === u.lang)) {
+          run.push(u);
+          u = u.next && unitAt(u.next);
+        }
+        if (run.length >= 2) { const after = run[run.length - 1].next; build(run); el = after; }
+        else el = el.nextElementSibling;
+      }
+    });
+  }
+
+  function choose(lang) {
+    pref = lang;
+    try { localStorage.setItem(KEY, pref); } catch (err) {}
+    document.querySelectorAll(".code-tabs").forEach(box => {
+      if (box.querySelector(`:scope > .ct-bar > .ct-tab[data-lang="${CSS.escape(pref)}"]`)) select(box, pref);
+    });
+  }
+  // capture phase, so a jump link ("↑ Java" in a topic index) reveals its tab before it scrolls
+  document.addEventListener("click", e => {
+    const b = e.target.closest && e.target.closest(".code-tabs .ct-tab");
+    if (b) { choose(b.dataset.lang); return; }
+    const a = e.target.closest && e.target.closest("a");
+    if (!a) return;
+    const id = ((a.getAttribute("onclick") || "").match(/getElementById\(['"]([^'"]+)['"]\)/) || [])[1]
+      || ((a.getAttribute("href") || "").match(/^#([^/]+)$/) || [])[1];
+    const t = id && document.getElementById(id);
+    const pane = t && t.closest(".ct-pane");
+    if (pane && pane.hidden) choose(pane.parentElement.querySelectorAll(":scope > .ct-bar > .ct-tab")[[...pane.parentElement.querySelectorAll(":scope > .ct-pane")].indexOf(pane)].dataset.lang);
+  }, true);
+
+  let queued = false;
+  const pending = new Set();
+  const obs = new MutationObserver(ms => {
+    for (const mu of ms) for (const n of mu.addedNodes) if (n.nodeType === 1) pending.add(n);
+    if (queued) return;
+    queued = true;
+    setTimeout(() => {
+      queued = false;
+      const nodes = [...pending]; pending.clear();
+      nodes.forEach(n => { if (n.isConnected) scan(n.parentElement || n); });
+    }, 0);
+  });
+  const roots = ["main", "drawer"].map(id => document.getElementById(id)).filter(Boolean);
+  (roots.length ? roots : [document.body]).forEach(r => obs.observe(r, { childList: true, subtree: true }));
+  scan(document.body);
 })();
 </script>
 <script type="module" src="app/boot.js"></script>
