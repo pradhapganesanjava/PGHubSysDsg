@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Render one topic page in a private copy of the layout harness and screenshot it.
-#   bash tools/mobile/check-topic.sh <content.html> <port> <workdir>
+#   bash tools/mobile/check-topic.sh <content.html> <port> <workdir>      (WIDTH_ONLY=1 for just the 390px report)
 # Prints: overflow report at 390px, then paths of white-theme slices (desktop, ~2000px each) and a 390px shot.
 # Needs tools/mobile/harness (run `node tools/mobile/build-harness.mjs` once). Safe to run in parallel with distinct ports/workdirs.
 set -euo pipefail
@@ -24,6 +24,7 @@ python3 -m http.server "$PORT" --directory "$WORK/harness" >/dev/null 2>&1 & SRV
 B="http://localhost:$PORT"
 echo "--- overflow at 390px"
 "$CHROME" --headless --disable-gpu --virtual-time-budget=9000 --dump-dom "$B/check.html" 2>/dev/null | sed -n '/<pre id="out">/,/<\/pre>/p' | sed 's/<[^>]*>//g'
+[ "${WIDTH_ONLY:-}" = "1" ] && exit 0   # WIDTH_ONLY=1: overflow report only, skip screenshots
 H_PX=30000
 "$CHROME" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --virtual-time-budget=40000 --window-size=1100,$H_PX \
   --screenshot="$WORK/shots/tall.png" "$B/frame.html?t=module.html%3Fm%3D02-patterns%23topic%2Ft1&theme=white&w=1100&h=$H_PX" >/dev/null 2>&1 || true
