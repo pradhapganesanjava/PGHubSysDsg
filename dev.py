@@ -18,6 +18,7 @@ must also be a registered origin, or sign-in fails.
 """
 import errno
 import os
+import socket
 import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
@@ -49,9 +50,26 @@ class Handler(SimpleHTTPRequestHandler):
             sys.stderr.write("  %s %s\n" % (args[1], args[0]))
 
 
+def in_use(port):
+    # Binding 127.0.0.1 succeeds even when another server (e.g. Vite) holds
+    # [::1] or *: on the same port — and the browser's "localhost" then goes to
+    # it. So ask both loopbacks whether anything is already answering.
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        with socket.socket(family, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
+            try:
+                if s.connect_ex((host, port)) == 0:
+                    return True
+            except OSError:
+                pass
+    return False
+
+
 if __name__ == "__main__":
     HTTPServer.allow_reuse_address = True
     for port in range(PORT, PORT + MAX_TRIES):
+        if in_use(port):
+            continue
         try:
             httpd = HTTPServer(("127.0.0.1", port), Handler)
             break
