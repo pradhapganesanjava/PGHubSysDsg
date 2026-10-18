@@ -25,12 +25,19 @@ const SEND_FOLLOWUP_MS = 2200              // a pause this long sends a follow-u
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition
 
 // ── commands ─────────────────────────────────────────────────────────────────
+// Ways to say "my answer is finished". Recognition often hears "submit" as
+// "summit" or "sub mit", so those count too. Used whole, and at the end of a
+// longer utterance (see TRAILING_SUBMIT), so they must not be phrases that end
+// ordinary sentences: bare "done" and "finished" only count on their own.
+const SUBMIT_PHRASES = "(submit|summit|submitted|sub mit)( (my |the )?answer)?|send (it|(my |the )?answer)" +
+  "|(review|check|grade|evaluate|score) (it|me|(my |the )?answer)|i('| a)?m (done|finished)|that('| i)?s (it|all|my answer)"
+
 // Matched against a whole utterance once it is normalised, so "next" ends the
 // question but "the next step is sharding" is part of your answer.
 const COMMANDS = [
   ['repeat',     /^(repeat|repeat (the )?question|read (the )?question( again)?|say (it|that) again|again|pardon|come again)$/],
   ['repeatAi',   /^(repeat (the )?(feedback|review|that)|say the (feedback|review) again)$/],
-  ['submit',     /^(submit|submit (my |the )?answer|done|i('| a)?m done|that('| i)?s (it|all|my answer)|(review|check) (my )?answer)$/],
+  ['submit',     new RegExp(`^(done|finished|${SUBMIT_PHRASES})$`)],
   ['next',       /^(next|next question|skip|skip (it|this)|move on|new question|go next)$/],
   ['clear',      /^(clear|clear (my )?answer|start over|scratch that|reset)$/],
   ['reveal',     /^(reveal|show (me )?(the )?answer|read (the )?(model |reference )?answer|tell me the answer|what('| i)?s the answer)$/],
@@ -45,7 +52,7 @@ const COMMANDS = [
 ]
 // Said at the end of a longer utterance, these still count: "… and that is how
 // it scales. Submit."
-const TRAILING_SUBMIT = /\s+(submit( my answer)?|that('| i)?s my answer|i('| a)?m done)$/
+const TRAILING_SUBMIT = new RegExp(`\\s+(${SUBMIT_PHRASES})$`)
 
 const HELP_TEXT = 'Say submit when your answer is complete. Repeat reads the question again. ' +
   'Next moves on. You can also say hint, read the answer, clear, pause, slower, faster, or stop.'
@@ -227,11 +234,12 @@ function onUtterance(raw) {
   if (!text) return
   const n = norm(text)
   const cmd = commandOf(n)
-  if (S.mode === 'paused') { if (cmd === 'resume' || cmd === 'end') run(cmd); return }
-  if (cmd) { run(cmd); return }
+  if (S.mode === 'paused') { if (cmd === 'resume' || cmd === 'end') { heard(cmd); run(cmd) } return }
+  if (cmd) { heard(cmd); run(cmd); return }
   if (S.phase === 'answer') {
     if (TRAILING_SUBMIT.test(n)) {
-      S.draft.push(text.replace(/[\s,.]*(submit( my answer)?|that'?s my answer|that is my answer|i'?m done|i am done)[\s.!]*$/i, ''))
+      S.draft.push(text.replace(new RegExp(`[\\s,.!?]*(${SUBMIT_PHRASES})[\\s.!?]*$`, 'i'), ''))
+      heard('submit')
       run('submit'); return
     }
     S.draft.push(text)
@@ -470,6 +478,9 @@ function log(who, text) {
   return d
 }
 function note(text) { log('sys', text) }
+// A spoken command does something unseen until the page answers, so say what
+// was heard: a missed "submit" is otherwise indistinguishable from a slow one.
+function heard(cmd) { log('sys', `▸ ${cmd}`) }
 function clearLog() { document.getElementById('vpLog').textContent = ''; document.getElementById('vpScore').textContent = '' }
 function scrollLog() { const l = document.getElementById('vpLog'); l.scrollTop = l.scrollHeight }
 
