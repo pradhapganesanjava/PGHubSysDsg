@@ -17,7 +17,7 @@ import { Config } from './config.js'
 // page happened to frame this one.
 const HOST_ORIGIN = 'https://pradhapganesanjava.github.io'
 const DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
-const TRUSTED = [HOST_ORIGIN, ...DEV_ORIGINS]
+export const TRUSTED = [HOST_ORIGIN, ...DEV_ORIGINS]
 
 export const framed = () => window.parent !== window
 
