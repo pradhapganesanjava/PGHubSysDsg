@@ -401,6 +401,50 @@
   .practice-body .rel{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .practice-body .rel .p{font-size:.76rem;background:var(--panel);border:1px solid var(--border);
     border-radius:8px;padding:2px 8px;color:var(--muted)}
+  /* ===== Voice practice (app/voice-practice.js) ===== */
+  .practice-head .voice{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:7px 12px;border-radius:9px;font-size:.85rem;cursor:pointer}
+  .practice-head .voice:hover{border-color:var(--accent)}
+  .practice-head .voice.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .voice-panel{margin-top:16px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+  .vp-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .vp-state{font-weight:600;font-size:.9rem;padding:4px 10px;border-radius:999px;background:var(--panel-2);border:1px solid var(--border)}
+  .vp-state[data-mode="listening"]{color:var(--live);border-color:var(--live);animation:vpPulse 1.6s ease-in-out infinite}
+  .vp-state[data-mode="speaking"],.vp-state[data-mode="thinking"]{color:var(--accent);border-color:var(--accent)}
+  @keyframes vpPulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--live) 25%,transparent)}}
+  @media (prefers-reduced-motion:reduce){.vp-state[data-mode="listening"]{animation:none}}
+  .vp-score{font-weight:700;color:var(--accent);font-size:1rem}
+  .vp-head .sp{flex:1}
+  .vp-log{max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:12px 0}
+  .vp-msg{padding:9px 12px;border-radius:10px;font-size:.92rem;line-height:1.55;white-space:pre-wrap;max-width:92%}
+  .vp-msg.q{background:var(--panel-2);border:1px solid var(--border);font-weight:600}
+  .vp-msg.you{align-self:flex-end;background:var(--accent-soft);border:1px solid var(--accent)}
+  .vp-msg.ai{background:var(--panel-2);border-left:3px solid var(--accent)}
+  .vp-msg.ai.pending::after{content:"Thinking…";color:var(--muted)}
+  .vp-msg.ai.err{border-left-color:#e5534b;color:#e5534b}
+  .vp-msg.ref{background:var(--panel-2);border-left:3px solid var(--live);max-height:220px;overflow:auto}
+  .vp-msg.sys{align-self:center;color:var(--muted);font-size:.8rem;background:none;padding:2px 6px}
+  .vp-live{min-height:44px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;font-size:.95rem}
+  .vp-live.empty{color:var(--muted);font-style:italic}
+  .vp-live .interim{color:var(--muted)}
+  .vp-input{display:flex;gap:8px;margin-top:10px}
+  .vp-input input{flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    border-radius:9px;padding:9px 12px;font:inherit;font-size:.92rem}
+  .vp-input input:focus{outline:none;border-color:var(--accent)}
+  .vp-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .vp-quick button,.vp-head button,.vp-input button,.vp-settings button{background:var(--panel-2);border:1px solid var(--border);
+    color:var(--text);border-radius:8px;padding:6px 10px;font-size:.82rem;cursor:pointer}
+  .vp-quick button:hover,.vp-head button:hover,.vp-input button:hover,.vp-settings button:hover{border-color:var(--accent)}
+  .vp-quick .go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .vp-says{color:var(--muted);font-size:.78rem;margin-top:10px}
+  .vp-settings{margin-top:12px;border-top:1px solid var(--border);padding-top:10px;font-size:.85rem}
+  .vp-settings summary{cursor:pointer;color:var(--muted)}
+  .vp-settings .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin:10px 0}
+  .vp-settings label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:.78rem}
+  .vp-settings label.inherited::after{content:"from PGHubTech";font-size:.7rem;color:var(--live)}
+  .vp-settings input,.vp-settings select{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:6px 8px;font:inherit;font-size:.85rem;min-width:0}
+  .vp-settings .src{color:var(--muted);margin:8px 0 0}
   .practice-body pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;
     overflow-x:auto;font-size:.82rem}
 </style>
@@ -477,6 +521,7 @@
           <button type="button" data-kind="terms">Terms</button>
         </div>
         <button type="button" class="primary" id="practiceNextTop">Next →</button>
+        <button type="button" class="voice" id="practiceVoice" title="Hands-free: questions read aloud, answers by voice, AI review">🎙 Voice</button>
         <span class="pm" id="practiceMeta">Random across all modules</span>
       </div>
       <div class="practice-card" id="practiceCard">
@@ -487,6 +532,45 @@
         <a class="ghost" id="practiceOpen">Open in module →</a>
         <span class="practice-progress" id="practiceProgress"></span>
       </div>
+      <section class="voice-panel" id="voicePanel" hidden aria-label="Voice practice">
+        <div class="vp-head">
+          <span class="vp-state" id="vpState" data-mode="idle" aria-live="polite">Off</span>
+          <span class="vp-score" id="vpScore"></span>
+          <span class="sp"></span>
+          <button type="button" id="vpSkip" title="Stop speaking and hand over the mic">⏭ Skip speech</button>
+          <button type="button" id="vpPause">⏸ Pause</button>
+        </div>
+        <div class="vp-log" id="vpLog" aria-live="polite"></div>
+        <div class="vp-live" id="vpLive"></div>
+        <form class="vp-input" id="vpForm">
+          <input id="vpText" type="text" autocomplete="off" placeholder="Or type an answer, follow-up or command…">
+          <button type="submit">Send</button>
+        </form>
+        <div class="vp-quick">
+          <button type="button" data-cmd="repeat">🔁 Repeat</button>
+          <button type="button" data-cmd="submit" class="go">✅ Submit</button>
+          <button type="button" data-cmd="hint">💡 Hint</button>
+          <button type="button" data-cmd="reveal">📖 Read answer</button>
+          <button type="button" data-cmd="clear">🧹 Clear</button>
+          <button type="button" data-cmd="next">Next →</button>
+        </div>
+        <p class="vp-says">Say: <b>submit</b> · <b>repeat</b> · <b>next</b> · hint · read the answer · read my answer · clear · pause / resume · slower / faster · help · stop. After the review, just talk to ask follow-ups.</p>
+        <details class="vp-settings" id="vpSettingsBox">
+          <summary>⚙ Voice &amp; AI settings</summary>
+          <p class="src" id="vpSource"></p>
+          <div class="grid2">
+            <label>Azure OpenAI endpoint<input id="vp-endpoint" placeholder="https://<resource>.openai.azure.com"></label>
+            <label>Chat deployment<input id="vp-deployment" placeholder="gpt-4o"></label>
+            <label>API version<input id="vp-apiVersion" placeholder="2024-12-01-preview"></label>
+            <label>API key<input id="vp-key" type="password" autocomplete="off"></label>
+            <label>Azure TTS deployment<input id="vp-ttsDeployment" placeholder="tts / gpt-4o-mini-tts"></label>
+            <label>Azure TTS voice<input id="vp-ttsVoice" placeholder="nova"></label>
+            <label>Speed <input id="vpRate" type="range" min="0.6" max="1.8" step="0.05"><span></span></label>
+          </div>
+          <button type="button" id="vpSave">Save</button>
+          <p class="src">Keys stay in this browser only; nothing is written to Drive.</p>
+        </details>
+      </section>
     </div>
 
     <p class="footnote" id="hubFootnote">Content is read from Google Drive. The tree, search and previews are built live from each module's data.</p>
@@ -886,6 +970,7 @@ function setView(v){
   // Practice has nothing to search, so the box goes; the rest of the row (view
   // switcher, status) stays, since that is how you leave Practice again.
   document.querySelector(".toolbar .search-wrap").style.display = isPractice ? "none" : "";
+  if (!isPractice) window.__sysdsgVoice?.stop();
   document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
   if (isPractice) startPractice();
 }
@@ -1023,6 +1108,8 @@ async function showPracticeCard(item){
   document.getElementById("practiceProgress").textContent =
     `shown ${st.seen} · pool ${st.pool.length}`;
   setNextDisabled(false);
+  // Voice practice reads the card it is told about; see app/voice-practice.js.
+  document.dispatchEvent(new CustomEvent("practice:card"));
 }
 
 async function startPractice(resetSeen){
@@ -1062,6 +1149,7 @@ document.getElementById("mClose").onclick = closeModal;
 document.addEventListener("keydown", e => {
   if (e.key === "Escape"){
     if (overlay.classList.contains("open")){ closeModal(); return; }
+    if (window.__sysdsgVoice?.on){ window.__sysdsgVoice.stop(); return; }
     if (currentView === "practice"){ setView("modules"); return; }
     return;
   }
@@ -1159,5 +1247,6 @@ document.getElementById("refresh").onclick = async () => {
 })();
 </script>
 <script type="module" src="app/hub-boot.js"></script>
+<script type="module" src="app/voice-practice.js"></script>
 </body>
 </html>
