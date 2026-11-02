@@ -10,8 +10,10 @@ import * as Settings from './settings.js'
 import { installStore, flush } from './store.js'
 import { installMedia }        from './media.js'
 import { installGate }         from './gate.js'
+import { installDocsUpload }   from './docs-upload.js'
 import { ready }               from './ready.js'
 import { readRootJson } from './drive.js'
+import { installAiNote }        from './ai-note.js'
 
 const params = new URLSearchParams(location.search)
 const mod    = params.get('m') || '01-foundations'
@@ -19,6 +21,13 @@ const mod    = params.get('m') || '01-foundations'
 installStore(mod)
 installMedia()
 installGate({ title: 'System Design Hub', emoji: '🧭', onFlush: flush })
+
+// Adding a document meant leaving the app for Drive. This puts it on the
+// Documents page — see the note in docs-upload.js.
+installDocsUpload({ onFlush: flush })
+
+// Pasted notes into a filed term, Q&A or topic — see the note in ai-note.js.
+installAiNote()
 
 ready.then(async () => {
   try {

@@ -21,7 +21,7 @@
  *   closed. Callers see the same {ok:true} they always did.
  */
 import { readModuleJson, writeModuleJson, moduleFolderId, ensureFolder, createFile,
-         findChild, listFolder, readTextById } from './drive.js'
+         updateFile, findChild, listFolder, readTextById } from './drive.js'
 import { ready } from './ready.js'
 import { restoreDriveUrls } from './media.js'
 
@@ -191,6 +191,60 @@ async function docsIndex() {
 
 export function assetMap() { return Store._assets ?? {} }
 
+const MIME_OF = { markdown: 'text/markdown', pdf: 'application/pdf', html: 'text/html' }
+
+/**
+ * POST /docs — put a document into this module's docs/ folder in Drive.
+ *
+ * Adding a document has always meant putting a file in that folder, and
+ * discoverNewDocs folds in whatever it finds there. This is the same act from
+ * inside the app, which also reuses the file id when the name is already taken,
+ * so a document can be revised without breaking the drive:<id> links already
+ * pointing at it. Its tags are keyed by name in docs.json, so they stay too.
+ */
+async function handleDocUpload(req) {
+  const sent = req.headers.get('X-Filename') || ''
+  const name = sent.split(/[\\/]/).pop().trim().replace(/[^A-Za-z0-9._ -]/g, '_')
+  if (!DOC_EXT.test(name)) return json({ error: `Not a document type this hub renders: ${sent}` }, 400)
+  const type = typeOf(name)
+
+  const sentBlob = await req.blob()
+  if (!sentBlob.size) return json({ error: 'That file is empty' }, 400)
+  // Named explicitly because media.js decides how to show a file from the type
+  // Drive hands back, and a browser may send none at all for some extensions.
+  const blob = new Blob([sentBlob], { type: MIME_OF[type] })
+
+  const docs     = await ensureFolder(await moduleFolderId(Store.mod), 'docs')
+  const existing = await findChild(docs, name)
+  const driveId  = existing ? await updateFile(existing, blob)
+                            : await createFile(docs, name, blob)
+
+  await refreshBakedDoc(name, type, driveId, blob)
+
+  Store._docs = null                       // rebuilt by the next GET /docs
+  return json({ ok: true, name, type, replaced: !!existing, url: `drive:${driveId}` })
+}
+
+/* A document in docs-index.json is served from that file, markdown body and all,
+   so replacing only the Drive copy would leave the old text on screen. A new
+   document is not in the index and needs nothing here: discoverNewDocs reads it. */
+async function refreshBakedDoc(name, type, driveId, blob) {
+  const idx = await readModuleJson(Store.mod, 'docs-index.json', [])
+  const doc = Array.isArray(idx) ? idx.find(d => d.name === name) : null
+  if (!doc) return
+  doc.driveId = driveId
+  if (type === 'markdown') {
+    const md = await blob.text()
+    doc.markdown = md
+    doc.text = md
+    const h = md.split('\n').find(l => /^\s*#\s+\S/.test(l))
+    if (h) doc.title = h.replace(/^\s*#\s+/, '').trim()
+  } else {
+    doc.text = ''                          // the old extract no longer matches
+  }
+  await writeModuleJson(Store.mod, 'docs-index.json', idx)
+}
+
 async function handleDocTags(payload) {
   const data  = await readModuleJson(Store.mod, 'docs.json', {})
   const docs  = await docsIndex()
@@ -327,6 +381,7 @@ export function installStore(moduleId) {
         }
         if (key === 'doctags') return await handleDocTags(await req.json())
         if (key === 'upload')  return await handleUpload(req)
+        if (key === 'docs')    return await handleDocUpload(req)
       }
     } catch (e) {
       emit('sysdsg:error', { message: e.message })

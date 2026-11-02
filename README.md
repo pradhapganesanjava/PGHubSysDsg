@@ -179,9 +179,11 @@ those servers produced rather than a reimplementation that could drift.
 
 ## Adding a document
 
-Drop the file into the module's `docs/` folder in Drive. The app lists that
+Use **Upload document** on a module's Documents page (HTML, Markdown or PDF), or
+drop the file into the module's `docs/` folder in Drive. The app lists that
 folder and folds in anything the baked index doesn't know about, so it appears
-in the sidebar on the next load — no migration, no checkout, no deploy.
+in the sidebar on the next load — no migration, no checkout, no deploy. Uploading
+a name that already exists replaces the file and keeps its links and tags.
 
 A new document is browsable and readable immediately. The one thing it lacks is
 its extracted **search** text, which `build-docs-index.py` produces by walking

@@ -135,6 +135,7 @@ export async function readBlobById() { return new Blob(['<h1>Doc</h1>'], { type:
 export async function readTextById() { return '# Doc' }
 export async function readJsonById(id, fb) { return fb ?? {} }
 export async function createFile() { return 'NEW' }
+export async function updateFile(id) { return id }
 export async function ensureFolder() { return 'F' }
 export async function rootId() { return 'ROOT' }
 export function clearIdCache() {}

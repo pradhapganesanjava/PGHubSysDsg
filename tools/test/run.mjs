@@ -100,11 +100,19 @@ export async function writeModuleJson(mod, name, data) {
 }
 export async function moduleFolderId() { return 'MOD' }
 export async function ensureFolder(p, n) { return p + '/' + n }
-export async function createFile(parent, name) { return 'NEW_' + name }
+export async function createFile(parent, name, blob) {
+  DB.uploaded = { name, type: blob?.type, via: 'create' }
+  return 'NEW_' + name
+}
+export async function updateFile(id, blob) {
+  DB.uploaded = { id, type: blob?.type, via: 'update' }
+  return id
+}
 export async function readBlobById() { return new Blob(['x']) }
 export async function readJsonById(id, f = {}) { return f }
 export async function readTextById(id) { return DB.driveFiles?.[id] ?? '' }
 export async function findChild(parent, name) {
+  if (DB.existingDocs?.[name]) return DB.existingDocs[name]
   return name === 'docs' && DB.docsFolder ? { id: 'DOCSFOLDER' } : null
 }
 export async function listFolder() { return DB.folderListing ?? [] }
@@ -319,7 +327,7 @@ await test('a drive: link is recognised the same way a drive: image is', async (
   // follow. media.js only ever looked at src, so that link was dead; it now
   // matches on href too.
   const media = await import(u('media.js'))
-  const sel = 'img[src^="drive:"], iframe[src^="drive:"], a[href^="drive:"]'
+  const sel = 'img[src^="drive:"], iframe[data-src^="drive:"], a[href^="drive:"]'
   const src = await readFile(join(dir, 'media.js'), 'utf8')
   assert.ok(src.includes(sel), 'the observer selector must cover anchors')
   assert.ok(/attributeFilter:\s*\['src', 'href'\]/.test(src),
@@ -342,6 +350,63 @@ await test('an image upload returns a drive: url', async () => {
     body: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
   })
   assert.match((await res.json()).url, /^drive:NEW_\d+__a_b\.png$/)
+})
+
+console.log('\n  document upload\n')
+
+const upload = (name, body = 'x', type = '') => F('http://localhost/docs', {
+  method: 'POST', headers: { 'X-Filename': name }, body: new Blob([body], { type }),
+})
+
+for (const [name, type, mime] of [
+  ['page.html', 'html', 'text/html'],
+  ['paper.pdf', 'pdf', 'application/pdf'],
+  ['note.md', 'markdown', 'text/markdown'],
+]) {
+  await test(`a new ${name} is created with the type its viewer needs`, async () => {
+    const res = await upload(name)
+    assert.equal(res.status, 200)
+    const out = await res.json()
+    assert.equal(out.type, type)
+    assert.equal(out.replaced, false)
+    assert.equal(out.url, `drive:NEW_${name}`)
+    assert.deepEqual(DB.uploaded, { name, type: mime, via: 'create' })
+  })
+}
+
+await test('other file types and empty files are refused', async () => {
+  assert.equal((await upload('tool.exe')).status, 400)
+  assert.equal((await upload('note.md', '')).status, 400)
+})
+
+await test('a path in the filename cannot escape the docs folder', async () => {
+  const out = await (await upload('../../evil$.html')).json()
+  assert.equal(out.name, 'evil_.html')
+})
+
+await test('uploading a taken name keeps the file id and the tag', async () => {
+  DB.existingDocs = { 'x.html': 'D1' }
+  DB.files['docs.json'] = { 'x.html': { tag: 'Keep', tags: [] } }
+  const out = await (await upload('x.html', '<h1>v2</h1>')).json()
+  assert.equal(out.replaced, true)
+  assert.equal(out.url, 'drive:D1')
+  assert.equal(DB.uploaded.via, 'update')
+  const doc = (await (await get('/docs')).json()).find(d => d.name === 'x.html')
+  assert.equal(doc.tag, 'Keep')
+  assert.equal(doc.url, 'drive:D1')
+  DB.existingDocs = null
+})
+
+await test('replacing a baked markdown document shows the new text', async () => {
+  DB.files['docs-index.json'].push({ name: 'old.md', title: 'Old', type: 'markdown',
+    driveId: 'M1', markdown: 'stale', text: 'stale' })
+  DB.existingDocs = { 'old.md': 'M1' }
+  Store._docs = null
+  await upload('old.md', '# Fresh\nnew body')
+  const doc = (await (await get('/docs')).json()).find(d => d.name === 'old.md')
+  assert.equal(doc.markdown, '# Fresh\nnew body')
+  assert.equal(doc.title, 'Fresh')
+  DB.existingDocs = null
 })
 
 await rm(dir, { recursive: true, force: true })
