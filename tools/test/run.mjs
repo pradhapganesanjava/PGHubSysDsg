@@ -355,7 +355,7 @@ await test('an image upload returns a drive: url', async () => {
 console.log('\n  document upload\n')
 
 const upload = (name, body = 'x', type = '') => F('http://localhost/docs', {
-  method: 'POST', headers: { 'X-Filename': name }, body: new Blob([body], { type }),
+  method: 'POST', headers: { 'X-Filename': encodeURIComponent(name) }, body: new Blob([body], { type }),
 })
 
 for (const [name, type, mime] of [
@@ -382,6 +382,20 @@ await test('other file types and empty files are refused', async () => {
 await test('a path in the filename cannot escape the docs folder', async () => {
   const out = await (await upload('../../evil$.html')).json()
   assert.equal(out.name, 'evil_.html')
+})
+
+await test('a filename outside Latin-1 survives the upload', async () => {
+  const res = await upload('Re\u0301sume\u0301 \u2014 Don\u2019t\u202f9.pdf')
+  assert.equal(res.status, 200)
+  assert.equal((await res.json()).name, 'R\u00e9sum\u00e9 \u2014 Don_t 9.pdf')
+})
+
+await test('a malformed encoded filename is treated as plain text', async () => {
+  const out = await (await upload('placeholder.pdf')).json()
+  assert.equal(out.name, 'placeholder.pdf')
+  const res = await F('http://localhost/docs', { method: 'POST',
+    headers: { 'X-Filename': '100%.pdf' }, body: new Blob(['x']) })
+  assert.equal((await res.json()).name, '100_.pdf')
 })
 
 await test('uploading a taken name keeps the file id and the tag', async () => {
