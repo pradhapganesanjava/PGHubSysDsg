@@ -115,7 +115,9 @@ async function upload(file, btn, status) {
   try {
     const r = await fetch('/docs', {
       method: 'POST',
-      headers: { 'X-Filename': file.name },
+      // Encoded because a header takes Latin-1 only, and a real filename can hold
+      // an em dash, a curly quote or the narrow space macOS puts in screenshots.
+      headers: { 'X-Filename': encodeURIComponent(file.name) },
       body: file,
     })
     const out = await r.json().catch(() => ({}))
