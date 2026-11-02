@@ -12,6 +12,7 @@ import { installMedia }        from './media.js'
 import { installGate }         from './gate.js'
 import { ready }               from './ready.js'
 import { readRootJson } from './drive.js'
+import { installAiNote }        from './ai-note.js'
 
 const params = new URLSearchParams(location.search)
 const mod    = params.get('m') || '01-foundations'
@@ -19,6 +20,9 @@ const mod    = params.get('m') || '01-foundations'
 installStore(mod)
 installMedia()
 installGate({ title: 'System Design Hub', emoji: '🧭', onFlush: flush })
+
+// Pasted notes into a filed term, Q&A or topic — see the note in ai-note.js.
+installAiNote()
 
 ready.then(async () => {
   try {
