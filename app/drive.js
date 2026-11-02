@@ -189,6 +189,24 @@ export async function createFile(parentId, name, blob) {
   return id
 }
 
+/**
+ * Replace an existing file's bytes, keeping its id.
+ *
+ * writeJsonInto does this for JSON; re-uploading a document needs the same and
+ * for the same reason. A document is referenced as `drive:<id>` from anywhere
+ * it has been linked, so replacing it by delete-and-create would leave every
+ * one of those links pointing at a file that no longer exists.
+ */
+export async function updateFile(fileId, blob) {
+  const r = await GAuth.fetch(
+    `${UPLOAD}/${fileId}?uploadType=media&supportsAllDrives=true`,
+    { method: 'PATCH',
+      headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+      body: blob })
+  if (!r.ok) throw new Error(`Upload failed (${r.status})`)
+  return fileId
+}
+
 /** Get-or-create a subfolder (used for images/ on first paste). */
 export async function ensureFolder(parentId, name) {
   const found = await findChild(parentId, name)

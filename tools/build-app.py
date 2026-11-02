@@ -118,6 +118,12 @@ def build(base_dir, out_path):
                     r'Open in new tab ↗</a></div>` \\+'),
          '        `<a href="${doc.url}">Open full page →</a></div>` +'),
 
+        # Written into src, the browser tries to load the drive: scheme itself
+        # before media.js can swap it, and logs an error for it. data-src keeps
+        # the reference away from the browser until there is a real URL.
+        (re.compile(r'`<iframe class="pdf-frame" src="\$\{doc\.url\}"'),
+         '`<iframe class="pdf-frame" data-src="${doc.url}"'),
+
         # The Docs tab latched `docsLoaded` before its request, so a single
         # failed load left it permanently claiming the folder was empty. With
         # the data coming over the network now rather than off localhost, a

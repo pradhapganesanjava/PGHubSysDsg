@@ -53,22 +53,54 @@ const VENDORED = {
 }
 
 /**
- * Fetch an HTML document and return a blob: URL for a self-contained copy,
- * with its relative asset references pointed at Drive.
+ * A blob: URL for an HTML document, with its relative asset references pointed
+ * at Drive. Two copies exist, and which one you get depends on where it goes:
+ *
+ *   the frame  — the document as authored. The app's own "All documents" bar
+ *                sits above it, so it needs nothing of its own.
+ *   full page  — the same document plus a way back, because navigating to a
+ *                blob: URL leaves the reader no chrome at all.
+ *
+ * Deciding here rather than at runtime inside the document is the whole point.
+ * The obvious test — "am I the top window?" — cannot tell the two apart: the
+ * PG Hub Tech portal embeds this site in an iframe of its own, so opening a
+ * document full page replaces the page *inside that frame*. The document is
+ * framed either way, and asking it to work out which frame it is in is a
+ * question with no reliable answer.
  */
-async function htmlDocUrl(id, blob) {
-  const key = 'html:' + id
+async function htmlDocUrl(id, blob, forNavigation) {
+  const key = (forNavigation ? 'htmlnav:' : 'html:') + id
   if (blobs.has(key)) return blobs.get(key)
   // A document is referenced twice — the iframe that displays it and the link
   // that opens it full page — and both resolve at render time. Without this
   // they race and download it twice.
   if (inFlight.has(key)) return inFlight.get(key)
-  const p = buildHtmlDoc(id, blob, key).finally(() => inFlight.delete(key))
+  const p = (async () => {
+    const html = await docSource(id, blob)
+    const url  = URL.createObjectURL(new Blob(
+      [forNavigation ? withBackBar(html) : html], { type: 'text/html' }))
+    blobs.set(key, url)
+    blobToDrive.set(url, `drive:${id}`)
+    return url
+  })().finally(() => inFlight.delete(key))
   inFlight.set(key, p)
   return p
 }
 
-async function buildHtmlDoc(id, blob, key) {
+/* The rewritten source, shared by both copies so a document is downloaded and
+   its assets resolved once however many times it is referenced. */
+const sources = new Map()          // driveId -> rewritten html
+
+async function docSource(id, blob) {
+  if (sources.has(id)) return sources.get(id)
+  const key = 'src:' + id
+  if (inFlight.has(key)) return inFlight.get(key)
+  const p = buildHtmlDoc(id, blob).finally(() => inFlight.delete(key))
+  inFlight.set(key, p)
+  return p
+}
+
+async function buildHtmlDoc(id, blob) {
 
   // The caller already downloaded the document to sniff its type; reuse it
   // rather than fetching the same (sometimes large) file a second time.
@@ -91,10 +123,82 @@ async function buildHtmlDoc(id, blob, key) {
   const html = raw.replace(ASSET_REF, (whole, open, rel, close) =>
     resolved.has(rel) ? `${open}${resolved.get(rel)}${close}` : whole)
 
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-  blobs.set(key, url)
-  blobToDrive.set(url, `drive:${id}`)
-  return url
+  sources.set(id, html)
+  return html
+}
+
+/* A document opened full page is a blob: URL. There is no site chrome around
+ * it, no address a reader would recognise, and nothing saying where they came
+ * from — a page that fills the window with no visible way out does not look
+ * like one the browser's Back button can undo, even though it can. So the copy
+ * we build carries its own way back.
+ *
+ * Only ever shown as the top document. Inside the app's frame the page already
+ * has "All documents" above it, and two back buttons is worse than one — hence
+ * the check at runtime rather than two different builds.
+ */
+const BACK_BAR = `
+<style>
+  #sysdsg-back-wrap{
+    position:fixed;left:14px;bottom:14px;z-index:2147483647;
+    display:flex;align-items:center;gap:8px;
+  }
+  #sysdsg-back{
+    width:38px;height:38px;padding:0;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    border:1px solid rgba(255,255,255,.16);background:#14181f;color:#fff;
+    cursor:pointer;box-shadow:0 3px 14px rgba(0,0,0,.3);
+  }
+  #sysdsg-back:hover{background:#2b333f}
+  #sysdsg-back:focus-visible{outline:2px solid #6ea8fe;outline-offset:2px}
+  #sysdsg-back-tip{
+    opacity:0;transition:opacity .12s;pointer-events:none;white-space:nowrap;
+    font:600 12px/1 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:#14181f;color:#fff;border:1px solid rgba(255,255,255,.16);
+    border-radius:6px;padding:6px 9px;box-shadow:0 3px 14px rgba(0,0,0,.3);
+  }
+  #sysdsg-back-wrap:hover #sysdsg-back-tip,
+  #sysdsg-back:focus-visible + #sysdsg-back-tip{opacity:1}
+  @media print{#sysdsg-back-wrap{display:none!important}}
+</style>
+<div id="sysdsg-back-wrap">
+  <button id="sysdsg-back" type="button" aria-label="Back" aria-describedby="sysdsg-back-tip">
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M9.5 15 4.5 10l5-5"/>
+      <path d="M4.5 10H14a5.5 5.5 0 0 1 0 11h-3.5"/>
+    </svg>
+  </button>
+  <span id="sysdsg-back-tip" role="tooltip">Back</span>
+</div>
+<script>
+(function () {
+  var b = document.getElementById('sysdsg-back');
+  if (!b) return;
+  var back = function () { history.back(); };
+  b.addEventListener('click', back);
+  document.addEventListener('keydown', function (e) {
+    // Not while the reader is typing into the document's own filter box.
+    var t = e.target || {};
+    if (e.key === 'Escape' && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) back();
+  });
+})();
+<\/script>`
+
+/** Put the way back into a document without disturbing what is already there.
+ *
+ * Match the last </body>, not the first. Interview notes and saved pages often
+ * include a literal </body> inside a <script> example. The first one is that
+ * example; injecting here splits the script, so the full-page copy never runs
+ * while the framed copy (which is left untouched) still renders.
+ */
+function withBackBar(html) {
+  const re = /<\/body\s*>/ig
+  let last = -1
+  let m
+  while ((m = re.exec(html))) last = m.index
+  if (last < 0) return html + BACK_BAR
+  return html.slice(0, last) + BACK_BAR + html.slice(last)
 }
 
 // Deliberately plain and theme-neutral: it flashes briefly inside a frame
@@ -115,18 +219,46 @@ function showFrame(el, url) {
   el.setAttribute('src', url)
 }
 
-async function resolveElement(el) {
-  // A link carries the reference in href; everything else in src.
-  const attr = el.tagName === 'A' ? 'href' : 'src'
+/* Elements still resolving, so a click on one can wait for the answer rather
+   than falling through to a URL no browser can open. */
+const pending = new WeakMap()          // element -> the resolve promise
+
+/* Where each kind of element carries its drive: reference. A frame's is on
+   data-src rather than src: written into src the browser would try to load the
+   scheme itself, before any observer could swap it, and log an error for a URL
+   that was never addressed to it. See tools/build-app.py. */
+const REF_ATTR = { A: 'href', IFRAME: 'data-src' }
+
+function resolveElement(el) {
+  const attr = REF_ATTR[el.tagName] ?? 'src'
   const ref = el.getAttribute(attr) || ''
   if (!ref.startsWith('drive:')) return
   const id = ref.slice('drive:'.length)
   if (!id) return
   // The observer sees both the added node and the src attribute, so the same
   // element can arrive twice; without this the document is downloaded twice.
-  if (el.dataset.driveResolving === id) return
+  if (el.dataset.driveResolving === id) return pending.get(el)
   el.dataset.driveResolving = id
   el.dataset.driveId = id
+
+  // A drive: href is a live navigation target from the moment it is in the
+  // DOM, and the scheme has no handler — clicking one before it resolves fails
+  // with "scheme does not have a registered handler" and nothing opens. Take
+  // the href off while it resolves; the delegated handler below makes a click
+  // in the meantime wait for the real URL instead of being swallowed.
+  if (el.tagName === 'A') {
+    el.removeAttribute('href')
+    el.dataset.drivePending = '1'
+    el.style.cursor = 'pointer'
+    el.title = 'Loading from Drive…'
+  }
+
+  const done = resolveRef(el, id)
+  pending.set(el, done)
+  return done
+}
+
+async function resolveRef(el, id) {
   try {
     if (el.tagName === 'IMG') {
       el.setAttribute('src', await driveBlobUrl(id))
@@ -135,9 +267,9 @@ async function resolveElement(el) {
     // An HTML document needs its relative assets rewritten before it can load
     // from a blob: URL; anything else (PDF, PNG) is handed over as-is.
     const isFrame = el.tagName === 'IFRAME'
-    const cached = blobs.get('html:' + id) ?? blobs.get(id)
+    const cached = blobs.get((isFrame ? 'html:' : 'htmlnav:') + id) ?? blobs.get(id)
     if (cached) {
-      if (isFrame) showFrame(el, cached); else el.setAttribute('href', cached)
+      if (isFrame) showFrame(el, cached); else settleLink(el, cached)
       return
     }
 
@@ -150,13 +282,13 @@ async function resolveElement(el) {
     const blob = await readBlobById(id)
     let url
     if (blob.type.includes('html')) {
-      url = await htmlDocUrl(id, blob)
+      url = await htmlDocUrl(id, blob, !isFrame)
     } else {
       url = URL.createObjectURL(blob)
       blobs.set(id, url)
       blobToDrive.set(url, `drive:${id}`)
     }
-    if (isFrame) showFrame(el, url); else el.setAttribute('href', url)
+    if (isFrame) showFrame(el, url); else settleLink(el, url)
   } catch (e) {
     delete el.dataset.driveResolving          // let a later attempt retry
     // A failed <img> shows its alt text, but a failed <iframe> just sits there
@@ -167,6 +299,8 @@ async function resolveElement(el) {
       el.alt = `[unavailable: ${e.message}]`
     } else if (el.tagName === 'A') {
       el.removeAttribute('href')
+      delete el.dataset.drivePending
+      el.style.cursor = ''
       el.title = `Unavailable — ${e.message}`
     } else {
       el.removeAttribute('srcdoc')
@@ -180,7 +314,15 @@ async function resolveElement(el) {
   }
 }
 
-const DRIVE_REFS = 'img[src^="drive:"], iframe[src^="drive:"], a[href^="drive:"]'
+/** Hand a link its real URL and let it behave like a link again. */
+function settleLink(el, url) {
+  el.setAttribute('href', url)
+  delete el.dataset.drivePending
+  el.style.cursor = ''
+  el.removeAttribute('title')
+}
+
+const DRIVE_REFS = 'img[src^="drive:"], iframe[data-src^="drive:"], a[href^="drive:"]'
 
 function scan(root) {
   if (!root || root.nodeType !== 1) return
@@ -217,6 +359,20 @@ export function __test_register(blobUrl, driveUrl) { blobToDrive.set(blobUrl, dr
 
 export function installMedia() {
   scan(document.body)
+
+  // "Open full page" is reachable while its document is still downloading.
+  // Capture the click, wait for the URL the frame is already fetching, then
+  // follow it — the alternative is a click that silently does nothing.
+  document.addEventListener('click', e => {
+    const a = e.target?.closest?.('a[data-drive-pending]')
+    if (!a) return
+    e.preventDefault()
+    pending.get(a)?.then(() => {
+      const href = a.getAttribute('href')
+      if (href) location.href = href
+    })
+  }, true)
+
   new MutationObserver(muts => {
     for (const m of muts) {
       if (m.type === 'attributes') { scan(m.target); continue }
@@ -226,7 +382,10 @@ export function installMedia() {
     childList: true, subtree: true,
     attributes: true, attributeFilter: ['src', 'href'],
   })
-  window.addEventListener('pagehide', () => {
+  window.addEventListener('pagehide', e => {
+    // Coming back from a full-page document can restore this page as it was,
+    // links included, and those links need their URLs to still work.
+    if (e.persisted) return
     for (const u of blobs.values()) { try { URL.revokeObjectURL(u) } catch {} }
     blobs.clear()
   })

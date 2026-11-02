@@ -3269,7 +3269,7 @@ function renderDoc(name) {
       `<div class="pdf-view">` +
         `<div class="pdf-bar"><span class="pdf-name">${escapeHtml(doc.title || doc.name)}</span>` +
         `<a href="${doc.url}">Open full page →</a></div>` +
-        `<iframe class="pdf-frame" src="${doc.url}" title="${escapeHtml(doc.name)}"></iframe>` +
+        `<iframe class="pdf-frame" data-src="${doc.url}" title="${escapeHtml(doc.name)}"></iframe>` +
       `</div>`;
   } else {
     detail.innerHTML = tagBar + `<div class="markdown-body">${renderMarkdown(doc.markdown)}</div>`;
