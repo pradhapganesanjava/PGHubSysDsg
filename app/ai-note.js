@@ -287,7 +287,7 @@ export function installAiNote() {
   const close  = el('button', { className: 'ai-btn', type: 'button', textContent: 'Close' })
   const panel  = el('div', { id: 'pghub-ai' },
     el('div', { className: 'ai-head' },
-      el('span', { textContent: '✨ AI Note' }),
+      el('span', { textContent: '✨ AI' }),
       el('span', { className: 'sub', textContent: `${Store.mod} · creates a Term, Q&A or Topic` }),
       close),
     log,
@@ -297,7 +297,7 @@ export function installAiNote() {
 
   // Styled as a tab but deliberately without data-tab: the page's showTab()
   // only ever marks it inactive, and it opens a drawer rather than a view.
-  const btn = el('button', { className: 'tab-btn', type: 'button', textContent: '✨ AI Note',
+  const btn = el('button', { className: 'tab-btn', type: 'button', textContent: '✨ AI',
                              title: 'Turn pasted notes into a term, Q&A or topic' })
   tabs.appendChild(btn)
 
