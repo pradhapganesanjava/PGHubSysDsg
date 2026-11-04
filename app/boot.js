@@ -14,6 +14,7 @@ import { installDocsUpload }   from './docs-upload.js'
 import { ready }               from './ready.js'
 import { readRootJson } from './drive.js'
 import { installAiNote }        from './ai-note.js'
+import { installScratchPad }    from './scratch-pad.js'
 
 const params = new URLSearchParams(location.search)
 const mod    = params.get('m') || '01-foundations'
@@ -28,6 +29,9 @@ installDocsUpload({ onFlush: flush })
 
 // Pasted notes into a filed term, Q&A or topic — see the note in ai-note.js.
 installAiNote()
+
+// A page to jot on over whatever is being read — see the note in scratch-pad.js.
+installScratchPad()
 
 ready.then(async () => {
   try {

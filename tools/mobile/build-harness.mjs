@@ -131,12 +131,34 @@ export async function writeRootJson(name, data) { ROOT_FILES[name] = data; retur
 export async function moduleFolderId() { return 'MOD' }
 export async function findChild() { return null }
 export async function listFolder() { return [] }
+// A small Drive for the scratch pad, kept across reloads so saving can be tested.
+const fakeFiles = () => JSON.parse(localStorage.getItem('harness-drive') || '{}')
+const putFakeFiles = f => localStorage.setItem('harness-drive', JSON.stringify(f))
+export async function listFiles(parent) {
+  return Object.values(fakeFiles()).filter(f => f.parent === parent && !f.trashed)
+}
+export async function patchFile(id, meta) {
+  const f = fakeFiles()
+  if (!f[id]) throw new Error('Updating the file failed (404)')
+  f[id] = { ...f[id], ...meta, modifiedTime: new Date().toISOString() }
+  putFakeFiles(f)
+}
 export async function readBlobById() { return new Blob(['<h1>Doc</h1>'], { type: 'text/html' }) }
-export async function readTextById() { return '# Doc' }
+export async function readTextById(id) { return fakeFiles()[id]?.text ?? '# Doc' }
 export async function readJsonById(id, fb) { return fb ?? {} }
-export async function createFile() { return 'NEW' }
-export async function updateFile(id) { return id }
-export async function ensureFolder() { return 'F' }
+export async function createFile(parent, name, blob, extra = {}) {
+  const f = fakeFiles()
+  const id = 'NEW' + Object.keys(f).length
+  f[id] = { ...extra, id, name, parent, text: await blob.text(), modifiedTime: new Date().toISOString() }
+  putFakeFiles(f)
+  return id
+}
+export async function updateFile(id, blob) {
+  const f = fakeFiles()
+  if (f[id]) { f[id].text = await blob.text(); f[id].modifiedTime = new Date().toISOString(); putFakeFiles(f) }
+  return id
+}
+export async function ensureFolder(parent, name) { return parent + '/' + name }
 export async function rootId() { return 'ROOT' }
 export function clearIdCache() {}
 `

@@ -169,10 +169,11 @@ async function writeJsonInto(folder, name, data) {
   return createFile(folder, name, new Blob([body], { type: 'application/json' }))
 }
 
-/** Multipart create — used for new JSON files and for pasted images. */
-export async function createFile(parentId, name, blob) {
+/** Multipart create — used for new JSON files, pasted images and scratch notes.
+ *  `extra` is further Drive metadata for the new file, such as a description. */
+export async function createFile(parentId, name, blob, extra = {}) {
   const boundary = 'sysdsg_' + Math.random().toString(36).slice(2)
-  const meta = { name, parents: [parentId] }
+  const meta = { ...extra, name, parents: [parentId] }
   const body = new Blob([
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
     JSON.stringify(meta),
@@ -207,6 +208,14 @@ export async function updateFile(fileId, blob) {
   return fileId
 }
 
+/** Change a file's metadata (name, description, trashed) without touching its bytes. */
+export async function patchFile(fileId, meta) {
+  const r = await GAuth.fetch(`${FILES}/${fileId}?fields=id&supportsAllDrives=true`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta),
+  })
+  if (!r.ok) throw new Error(`Updating the file failed (${r.status})`)
+}
+
 /** Get-or-create a subfolder (used for images/ on first paste). */
 export async function ensureFolder(parentId, name) {
   const found = await findChild(parentId, name)
@@ -234,6 +243,32 @@ export async function listFolder(parentId) {
                 (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
     const r = await GAuth.fetch(url)
     if (!r.ok) break
+    const data = await r.json()
+    out.push(...(data.files ?? []))
+    pageToken = data.nextPageToken ?? ''
+  } while (pageToken)
+  return out
+}
+
+/**
+ * A folder's children with the file fields a caller names. Unlike listFolder,
+ * which stops quietly at a failed page, this throws {status}: the scratch pad
+ * must not show a failed listing as "no notes".
+ */
+export async function listFiles(parentId, fields) {
+  const out = []
+  let pageToken = ''
+  do {
+    const url = `${FILES}?q=${encodeURIComponent(`'${parentId}' in parents and trashed=false`)}` +
+                `&fields=${encodeURIComponent(`nextPageToken,files(${fields})`)}` +
+                `&pageSize=1000&supportsAllDrives=true` +
+                (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
+    const r = await GAuth.fetch(url)
+    if (!r.ok) {
+      const err = new Error(`Listing the notes failed (${r.status})`)
+      err.status = r.status
+      throw err
+    }
     const data = await r.json()
     out.push(...(data.files ?? []))
     pageToken = data.nextPageToken ?? ''

@@ -1,0 +1,35 @@
+/* Line icons for the Scratch Pad, drawn in currentColor so they follow every
+ * theme and hover state. */
+const path = d => `<svg class="sp-ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`
+
+export const ICONS = {
+  sidebar: path('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>'),
+  plus:    path('<path d="M12 5v14M5 12h14"/>'),
+  trash:   path('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5"/>'),
+  save:    path('<path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/>'),
+  close:   path('<path d="M6 6l12 12M18 6 6 18"/>'),
+  expand:  path('<path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/>'),
+  shrink:  path('<path d="M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7"/>'),
+  dockBottom: path('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 14h18"/>'),
+  dockLeft:   path('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 4v16"/>'),
+  dockRight:  path('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M14 4v16"/>'),
+  tag:     path('<path d="M4 4h7l9 9-7 7-9-9zM8 8h.01"/>'),
+  write:   path('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17zM14 8l3 3"/>'),
+  code:    path('<path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/>'),
+  read:    path('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/>'),
+  draw:    path('<path d="M3 17c3-6 5-9 7-8s-2 7 0 8 4-6 6-5-1 5 1 5 3-2 4-3"/>'),
+  pen:     path('<path d="M4 20l1.2-4.6L16 4.6a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8zM14 6.6l3.4 3.4"/>'),
+  eraser:  path('<path d="M8.5 20 3.8 15.3a2 2 0 0 1 0-2.8l8.7-8.7a2 2 0 0 1 2.8 0l4.9 4.9a2 2 0 0 1 0 2.8L12 20zM20 20H8.5M8 8.5l7.5 7.5"/>'),
+  hand:    path('<path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11m0-6.5a1.5 1.5 0 0 1 3 0V11m0-5a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-.8a6 6 0 0 1-4.7-2.3L3.2 15a1.6 1.6 0 0 1 2.4-2L8 15"/>'),
+  undo:    path('<path d="M9 7 4 12l5 5M4 12h10a5 5 0 0 1 5 5v1"/>'),
+  fit:     path('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+  prev:    path('<path d="m15 6-6 6 6 6"/>'),
+  next:    path('<path d="m9 6 6 6-6 6"/>'),
+  up:      path('<path d="m6 15 6-6 6 6"/>'),
+  down:    path('<path d="m6 9 6 6 6-6"/>'),
+  more:    path('<path d="M5 12h.01M12 12h.01M19 12h.01"/>'),
+  link:    path('<path d="M10 14a4 4 0 0 0 6 .4l3-3a4 4 0 0 0-5.7-5.7l-1.4 1.4M14 10a4 4 0 0 0-6-.4l-3 3a4 4 0 0 0 5.7 5.7l1.4-1.4"/>'),
+  image:   path('<rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.5"/><path d="m21 16-5-5-8 8"/>'),
+  marker:  path('<path d="m9 15-1.5 5 5-1.5L21 10l-3.5-3.5zM14 9l3.5 3.5M4 21h4"/>'),
+  table:   path('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M3 15h18M9 5v14M15 5v14"/>'),
+}
